@@ -174,10 +174,12 @@ def _download_single_ticker_polygon(ticker: str, start_date: str, end_date: str)
         )
 
     index = pd.to_datetime(frame[time_col], unit="ms", utc=True, errors="coerce").dt.tz_localize(None)
+    # Use positional arrays to avoid pandas label-alignment mismatch between
+    # frame RangeIndex and the DatetimeIndex we assign here.
     normalized = pd.DataFrame(
         {
-            "Close": pd.to_numeric(frame[close_col], errors="coerce"),
-            "Volume": pd.to_numeric(frame[volume_col], errors="coerce"),
+            "Close": pd.to_numeric(frame[close_col], errors="coerce").to_numpy(),
+            "Volume": pd.to_numeric(frame[volume_col], errors="coerce").to_numpy(),
         },
         index=index,
     )
