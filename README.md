@@ -1,18 +1,28 @@
 # Quant Strategy Tournament (GLM-5 Aligned)
 
-A deployable web app that runs a **quant strategy tournament** on lagged free market data and ranks strategies by both P&L and repeatability.
+A deployable web app that runs a **quant strategy tournament** on configurable market data providers and ranks strategies by both P&L and repeatability.
 
 This repo is aligned to the GLM-5 strategy paper in:
 - `docs/glm5-quant-strategy-paper.md`
 
 ## What it does
-- Pulls free lagged daily market data (`yfinance`)
+- Pulls daily market data from configurable providers (`yfinance` or paid `polygon`)
 - Runs multiple strategy families in one framework
 - Applies lagged execution (`signal t`, `fill t+1`)
 - Applies trading + borrow cost model
 - Computes performance and risk metrics
 - Computes repeatability score (`skill probability + deflated sharpe confidence + stability + turnover penalty`)
+- Computes White Reality Check p-value + PBO estimate for tournament-level robustness
 - Returns ranked leaderboard via API and browser UI
+
+## Data provider modes
+- `DATA_SOURCE=yfinance`: free, lagged, easy to start.
+- `DATA_SOURCE=polygon`: paid API key (`POLYGON_API_KEY`) for more reliable bars.
+- `DATA_SOURCE=auto`: follows `DATA_SOURCE_FALLBACK_ORDER` (for example `polygon,yfinance`).
+
+Important:
+- Better bars do not automatically remove survivorship bias.
+- Production-grade research still needs point-in-time universes including delisted symbols.
 
 ## Current implementation scope
 See `docs/implementation-status.md`.
@@ -79,8 +89,16 @@ Recommended Railway env vars:
 
 ```bash
 APP_ENV=production
-DATA_SOURCE=yfinance
+DATA_SOURCE=polygon
+POLYGON_API_KEY=your_key_here
+DATA_SOURCE_ALLOW_FALLBACK=true
+DATA_SOURCE_FALLBACK_ORDER=polygon,yfinance
+DATA_REQUEST_TIMEOUT_SECONDS=30
 DATA_CACHE_DIR=data/cache
+ALLOWED_ORIGINS=https://your-frontend-domain.com
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_REQUESTS=10
+SHOW_SURVIVORSHIP_WARNING=true
 DEFAULT_TRADING_COST_BPS=10
 DEFAULT_BORROW_COST_BPS_ANNUAL=50
 DEFAULT_RISK_FREE_RATE_ANNUAL=0.02
@@ -89,4 +107,5 @@ DEFAULT_RISK_FREE_RATE_ANNUAL=0.02
 ## Notes
 - This is a research backtesting environment, not production execution software.
 - Fundamental and intraday strategies require richer data feeds for full-fidelity implementation.
+- Paid bars improve reliability, but survivorship-free constituent history is still required for institutional-quality validation.
 - Always perform paper trading before live deployment.

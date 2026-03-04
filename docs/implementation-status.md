@@ -25,3 +25,9 @@ This repository follows the document in `docs/glm5-quant-strategy-paper.md`.
 
 ## Why some are marked planned
 The current default data mode uses free lagged daily bars. Certain paper strategies require richer data and heavier infra (intraday order book, GPU DL training, advanced clustering modules).
+
+## Data and validation status
+- Provider abstraction implemented: `yfinance`, `polygon`, and fallback/auto mode.
+- UI/API now expose White Reality Check p-value and PBO estimate.
+- Survivorship-bias warning is explicitly surfaced in API metadata and UI.
+- Still required for production-grade inference: point-in-time universes including delisted symbols.

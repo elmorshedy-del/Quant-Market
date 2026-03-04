@@ -9,7 +9,13 @@ from ..config import (
     DEFAULT_LOOKBACK_LONG_DAYS,
     DEFAULT_LOOKBACK_MEDIUM_DAYS,
     DEFAULT_LOOKBACK_SHORT_DAYS,
+    DEFAULT_ML_EMBARGO_DAYS,
+    DEFAULT_ML_MIN_TRAIN_DAYS,
+    DEFAULT_ML_RETRAIN_FREQUENCY_DAYS,
+    DEFAULT_PAIR_FORMATION_DAYS,
+    DEFAULT_PCA_FORMATION_DAYS,
     TRADING_DAYS_PER_YEAR,
+    settings,
 )
 from .base import (
     BaseStrategy,
@@ -26,6 +32,76 @@ EPSILON = 1e-9
 
 def _zero_weights(context: StrategyContext) -> pd.DataFrame:
     return pd.DataFrame(0.0, index=context.prices.index, columns=context.prices.columns)
+
+
+def _rolling_pair_for_window(window_returns: pd.DataFrame) -> tuple[str, str] | None:
+    if window_returns.empty or window_returns.shape[1] < 2:
+        return None
+
+    corr = window_returns.corr().replace([np.inf, -np.inf], np.nan)
+    if corr.empty:
+        return None
+
+    np.fill_diagonal(corr.values, np.nan)
+    if corr.isna().all().all():
+        return None
+
+    best = corr.stack().idxmax()
+    if not isinstance(best, tuple) or len(best) != 2:
+        return None
+    return str(best[0]), str(best[1])
+
+
+def _build_walk_forward_predictions(
+    dataset: pd.DataFrame,
+    all_dates: pd.DatetimeIndex,
+    feature_columns: list[str],
+    model_builder,
+    min_train_days: int = DEFAULT_ML_MIN_TRAIN_DAYS,
+    retrain_frequency_days: int = DEFAULT_ML_RETRAIN_FREQUENCY_DAYS,
+    embargo_days: int = DEFAULT_ML_EMBARGO_DAYS,
+) -> pd.DataFrame:
+    prediction_frame = pd.DataFrame(index=all_dates)
+    if dataset.empty:
+        return prediction_frame
+
+    unique_dates = sorted(dataset["date"].unique())
+    if len(unique_dates) < min_train_days + embargo_days + 1:
+        return prediction_frame
+
+    last_fit_idx = -1
+    model = None
+    predictions: list[pd.DataFrame] = []
+
+    for idx in range(min_train_days + embargo_days, len(unique_dates)):
+        prediction_date = unique_dates[idx]
+        train_end_idx = idx - embargo_days
+        if train_end_idx <= 0:
+            continue
+
+        if model is None or (idx - last_fit_idx) >= retrain_frequency_days:
+            train_dates = unique_dates[:train_end_idx]
+            train = dataset[dataset["date"].isin(train_dates)]
+            if train.empty:
+                continue
+            model = model_builder()
+            model.fit(train[feature_columns], train["target"])
+            last_fit_idx = idx
+
+        prediction_rows = dataset[dataset["date"] == prediction_date]
+        if prediction_rows.empty or model is None:
+            continue
+
+        predicted = prediction_rows[["date", "ticker"]].copy()
+        predicted["prediction"] = model.predict(prediction_rows[feature_columns])
+        predictions.append(predicted)
+
+    if not predictions:
+        return prediction_frame
+
+    merged = pd.concat(predictions, ignore_index=True)
+    pivot = merged.pivot(index="date", columns="ticker", values="prediction")
+    return pivot.reindex(all_dates).fillna(0.0)
 
 
 class BuyAndHoldStrategy(BaseStrategy):
@@ -128,45 +204,47 @@ class PairsSpreadReversionStrategy(BaseStrategy):
         implemented=True,
         complexity="medium",
         data_requirements="daily_ohlcv",
-        notes="Chooses most-correlated pair in-sample and trades rolling spread z-score reversion.",
+        notes="Chooses rolling-window pair and rolling hedge ratio using only historical data.",
     )
 
-    def _pick_pair(self, prices: pd.DataFrame) -> tuple[str, str] | None:
-        returns = prices.pct_change().dropna(how="all")
-        corr = returns.corr().replace([np.inf, -np.inf], np.nan)
-        np.fill_diagonal(corr.values, np.nan)
-        if corr.isna().all().all():
-            return None
-        best = corr.stack().idxmax()
-        if not isinstance(best, tuple) or len(best) != 2:
-            return None
-        return str(best[0]), str(best[1])
-
     def generate_weights(self, context: StrategyContext) -> pd.DataFrame:
-        pair = self._pick_pair(context.prices)
-        if pair is None:
+        if context.prices.shape[1] < 2:
             return _zero_weights(context)
-
-        ticker_a, ticker_b = pair
-        if ticker_a not in context.prices.columns or ticker_b not in context.prices.columns:
-            return _zero_weights(context)
-
-        log_a = np.log(context.prices[ticker_a].replace(0, np.nan)).ffill()
-        log_b = np.log(context.prices[ticker_b].replace(0, np.nan)).ffill()
-
-        valid = log_a.notna() & log_b.notna()
-        if valid.sum() < DEFAULT_LOOKBACK_LONG_DAYS:
-            return _zero_weights(context)
-
-        beta = np.polyfit(log_b[valid], log_a[valid], deg=1)[0]
-        spread = log_a - beta * log_b
-        spread_mean = spread.rolling(DEFAULT_LOOKBACK_MEDIUM_DAYS).mean()
-        spread_std = spread.rolling(DEFAULT_LOOKBACK_MEDIUM_DAYS).std().replace(0, np.nan)
-        z = ((spread - spread_mean) / spread_std).shift(1).clip(-2.0, 2.0)
 
         weights = _zero_weights(context)
-        weights[ticker_a] = -z
-        weights[ticker_b] = z
+        lagged_prices = context.prices.shift(1)
+        lagged_returns = lagged_prices.pct_change().replace([np.inf, -np.inf], np.nan)
+        min_required = max(DEFAULT_PAIR_FORMATION_DAYS, DEFAULT_LOOKBACK_MEDIUM_DAYS)
+
+        for row_idx in range(min_required, len(lagged_prices)):
+            returns_window = lagged_returns.iloc[row_idx - DEFAULT_PAIR_FORMATION_DAYS : row_idx]
+            pair = _rolling_pair_for_window(returns_window)
+            if pair is None:
+                continue
+
+            ticker_a, ticker_b = pair
+            pair_prices = lagged_prices[[ticker_a, ticker_b]].iloc[row_idx - DEFAULT_PAIR_FORMATION_DAYS : row_idx]
+            if pair_prices.isna().any().any():
+                continue
+
+            log_a = np.log(pair_prices[ticker_a].replace(0, np.nan))
+            log_b = np.log(pair_prices[ticker_b].replace(0, np.nan))
+            valid = log_a.notna() & log_b.notna()
+            if valid.sum() < DEFAULT_LOOKBACK_MEDIUM_DAYS:
+                continue
+
+            beta = np.polyfit(log_b[valid], log_a[valid], deg=1)[0]
+            spread_window = (log_a - beta * log_b).dropna()
+            spread_std = spread_window.std(ddof=1)
+            if not np.isfinite(spread_std) or spread_std <= EPSILON:
+                continue
+
+            z_score = (spread_window.iloc[-1] - spread_window.mean()) / spread_std
+            z_clamped = float(np.clip(z_score, -2.0, 2.0))
+            current_date = lagged_prices.index[row_idx]
+            weights.at[current_date, ticker_a] = -z_clamped
+            weights.at[current_date, ticker_b] = z_clamped
+
         return normalize_weight_frame(weights)
 
 
@@ -178,24 +256,40 @@ class PCAResidualReversionStrategy(BaseStrategy):
         implemented=True,
         complexity="medium",
         data_requirements="daily_ohlcv",
-        notes="Removes first principal component then mean-reverts idiosyncratic residuals.",
+        notes="Uses rolling PCA decomposition from historical windows only.",
     )
 
     def generate_weights(self, context: StrategyContext) -> pd.DataFrame:
-        returns = context.returns.copy().fillna(0.0)
-        if returns.shape[1] < 2:
+        lagged_returns = context.returns.shift(1).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        if lagged_returns.shape[1] < 2:
             return _zero_weights(context)
 
-        matrix = returns.to_numpy(dtype=float)
-        covariance = np.cov(matrix.T)
-        eigvals, eigvecs = np.linalg.eigh(covariance)
-        principal = eigvecs[:, np.argmax(eigvals)]
+        weights = _zero_weights(context)
+        min_required = max(DEFAULT_PCA_FORMATION_DAYS, lagged_returns.shape[1] + 1)
 
-        common_component = np.outer(matrix @ principal, principal)
-        residual = matrix - common_component
-        residual_df = pd.DataFrame(residual, index=returns.index, columns=returns.columns)
-        signal = -residual_df.shift(1)
-        return normalize_weight_frame(signal)
+        for row_idx in range(min_required, len(lagged_returns)):
+            window = lagged_returns.iloc[row_idx - DEFAULT_PCA_FORMATION_DAYS : row_idx]
+            if window.empty:
+                continue
+
+            covariance = np.cov(window.to_numpy(dtype=float).T)
+            if not np.isfinite(covariance).all():
+                continue
+
+            eigvals, eigvecs = np.linalg.eigh(covariance)
+            if eigvals.size == 0:
+                continue
+
+            principal = eigvecs[:, np.argmax(eigvals)]
+            current_return = lagged_returns.iloc[row_idx].to_numpy(dtype=float)
+            factor_projection = float(np.dot(current_return, principal))
+            common_component = principal * factor_projection
+            residual = current_return - common_component
+
+            current_date = lagged_returns.index[row_idx]
+            weights.loc[current_date] = -residual
+
+        return normalize_weight_frame(weights)
 
 
 class VolatilityTargetTrendStrategy(BaseStrategy):
@@ -215,7 +309,7 @@ class VolatilityTargetTrendStrategy(BaseStrategy):
         trend_signal = np.sign(market_price.pct_change(DEFAULT_LOOKBACK_LONG_DAYS).shift(1)).fillna(0.0)
 
         realized_vol = market_return.rolling(DEFAULT_LOOKBACK_SHORT_DAYS).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
-        target_vol = 0.15
+        target_vol = float(settings.default_target_vol_annual)
         leverage = (target_vol / (realized_vol + EPSILON)).clip(lower=0.0, upper=1.5).fillna(0.0)
 
         n_assets = len(context.prices.columns)
@@ -345,23 +439,16 @@ class ElasticNetForecastStrategy(BaseStrategy):
         if dataset.empty:
             return _zero_weights(context)
 
-        unique_dates = sorted(dataset["date"].unique())
-        split_idx = int(len(unique_dates) * 0.70)
-        if split_idx < 60:
-            return _zero_weights(context)
-        split_date = unique_dates[split_idx]
-
         features = ["ret_1d", "ret_5d", "ret_20d", "vol_20d", "mom_63d"]
-        train = dataset[dataset["date"] < split_date]
-        if train.empty:
-            return _zero_weights(context)
-
-        model = ElasticNet(alpha=0.001, l1_ratio=0.5, max_iter=5000, random_state=42)
-        model.fit(train[features], train["target"])
-
-        dataset["prediction"] = model.predict(dataset[features])
-        prediction_pivot = dataset.pivot(index="date", columns="ticker", values="prediction")
-        prediction_pivot = prediction_pivot.reindex(context.prices.index).fillna(0.0)
+        prediction_pivot = _build_walk_forward_predictions(
+            dataset=dataset,
+            all_dates=context.prices.index,
+            feature_columns=features,
+            model_builder=lambda: ElasticNet(alpha=0.001, l1_ratio=0.5, max_iter=5000, random_state=42),
+            min_train_days=DEFAULT_ML_MIN_TRAIN_DAYS,
+            retrain_frequency_days=DEFAULT_ML_RETRAIN_FREQUENCY_DAYS,
+            embargo_days=DEFAULT_ML_EMBARGO_DAYS,
+        )
 
         return long_short_from_score(prediction_pivot, quantile=0.30)
 
@@ -402,28 +489,21 @@ class GradientBoostingForecastStrategy(BaseStrategy):
         if dataset.empty:
             return _zero_weights(context)
 
-        unique_dates = sorted(dataset["date"].unique())
-        split_idx = int(len(unique_dates) * 0.70)
-        if split_idx < 60:
-            return _zero_weights(context)
-        split_date = unique_dates[split_idx]
-
         features = ["ret_1d", "ret_5d", "ret_20d", "vol_20d", "vol_63d", "mom_63d"]
-        train = dataset[dataset["date"] < split_date]
-        if train.empty:
-            return _zero_weights(context)
-
-        model = GradientBoostingRegressor(
-            n_estimators=120,
-            max_depth=3,
-            learning_rate=0.05,
-            random_state=42,
+        prediction_pivot = _build_walk_forward_predictions(
+            dataset=dataset,
+            all_dates=context.prices.index,
+            feature_columns=features,
+            model_builder=lambda: GradientBoostingRegressor(
+                n_estimators=120,
+                max_depth=3,
+                learning_rate=0.05,
+                random_state=42,
+            ),
+            min_train_days=DEFAULT_ML_MIN_TRAIN_DAYS,
+            retrain_frequency_days=DEFAULT_ML_RETRAIN_FREQUENCY_DAYS,
+            embargo_days=DEFAULT_ML_EMBARGO_DAYS,
         )
-        model.fit(train[features], train["target"])
-
-        dataset["prediction"] = model.predict(dataset[features])
-        prediction_pivot = dataset.pivot(index="date", columns="ticker", values="prediction")
-        prediction_pivot = prediction_pivot.reindex(context.prices.index).fillna(0.0)
 
         return long_short_from_score(prediction_pivot, quantile=0.30)
 

@@ -8,10 +8,11 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from .config import TRADING_DAYS_PER_YEAR
+from .config import TRADING_DAYS_PER_YEAR, settings
 from .data import DataLoadError, load_price_data
 from .metrics import (
     annualized_return,
+    probability_of_backtest_overfitting,
     calmar_ratio,
     bootstrap_probability_of_skill,
     cvar_5pct,
@@ -21,6 +22,7 @@ from .metrics import (
     sharpe_ratio,
     sortino_ratio,
     turnover_annualized,
+    white_reality_check_pvalue,
 )
 from .models import StrategyResult, TournamentRequest, TournamentResponse
 from .strategies.base import StrategyContext
@@ -45,7 +47,8 @@ class TournamentEngine:
         strategy,
         context: StrategyContext,
         request: TournamentRequest,
-    ) -> StrategyResult:
+        num_trials: int,
+    ) -> tuple[StrategyResult, pd.Series]:
         raw_weights = strategy.generate_weights(context)
         if raw_weights is None or raw_weights.empty:
             raise ValueError("Strategy returned empty weights.")
@@ -57,7 +60,7 @@ class TournamentEngine:
 
         gross = (executed_weights * returns).sum(axis=1)
 
-        turnover_daily = weights.diff().abs().sum(axis=1).fillna(0.0)
+        turnover_daily = executed_weights.diff().abs().sum(axis=1).fillna(0.0)
         trading_cost = turnover_daily * (request.trading_cost_bps / 10_000.0)
 
         borrow_daily_rate = (request.borrow_cost_bps_annual / 10_000.0) / TRADING_DAYS_PER_YEAR
@@ -72,11 +75,11 @@ class TournamentEngine:
         sortino = sortino_ratio(net, request.risk_free_rate_annual)
         max_dd = max_drawdown(net)
         calmar = calmar_ratio(cagr, max_dd)
-        turn_annual = turnover_annualized(weights)
+        turn_annual = turnover_annualized(executed_weights)
         hit = hit_rate(net)
         cvar = cvar_5pct(net)
         prob_skill = bootstrap_probability_of_skill(net, request.risk_free_rate_annual)
-        dsr_conf = deflated_sharpe_confidence(sharpe, net)
+        dsr_conf = deflated_sharpe_confidence(sharpe, net, num_trials=num_trials)
 
         rolling_sharpe = net.rolling(63).apply(
             lambda x: sharpe_ratio(pd.Series(x), request.risk_free_rate_annual), raw=False
@@ -117,7 +120,7 @@ class TournamentEngine:
             repeatability_score=float(repeatability_score),
             complexity=strategy.meta.complexity,
             skipped_reason=None,
-        )
+        ), net
 
     def _benchmark(self, prices: pd.DataFrame, initial_capital: float) -> dict[str, float]:
         benchmark_price = prices.mean(axis=1)
@@ -135,7 +138,7 @@ class TournamentEngine:
         run_id = str(uuid.uuid4())
         started = time.time()
 
-        close, volume = load_price_data(
+        close, volume, provider_map = load_price_data(
             tickers=request.tickers,
             start_date=request.start_date.isoformat(),
             end_date=request.end_date.isoformat(),
@@ -147,9 +150,11 @@ class TournamentEngine:
             if request.strategy_ids
             else list(self._strategies.keys())
         )
+        selected_implemented_count = max(1, sum(1 for sid in selected_ids if sid in self._strategies))
 
         ranking: list[StrategyResult] = []
         skipped: list[StrategyResult] = []
+        strategy_net_series: dict[str, pd.Series] = {}
 
         strategy_meta_lookup = {m.strategy_id: m for m in list_strategy_meta()}
 
@@ -187,8 +192,15 @@ class TournamentEngine:
                 continue
 
             try:
-                result = self._evaluate_strategy(strategy_id, strategy, context, request)
+                result, net_series = self._evaluate_strategy(
+                    strategy_id,
+                    strategy,
+                    context,
+                    request,
+                    num_trials=selected_implemented_count,
+                )
                 ranking.append(result)
+                strategy_net_series[strategy_id] = net_series
             except Exception as exc:  # noqa: BLE001
                 skipped.append(
                     StrategyResult(
@@ -220,11 +232,45 @@ class TournamentEngine:
             reverse=True,
         )
 
+        benchmark_returns = context.prices.mean(axis=1).pct_change().fillna(0.0)
+        strategy_return_frame = pd.DataFrame(strategy_net_series).reindex(context.prices.index).fillna(0.0)
+        wrc_pvalue = white_reality_check_pvalue(
+            strategy_return_frame=strategy_return_frame,
+            benchmark_returns=benchmark_returns,
+        )
+        pbo_estimate = probability_of_backtest_overfitting(strategy_return_frame)
+
         elapsed = time.time() - started
+        warnings: list[str] = []
+        providers_used = sorted({provider for provider in provider_map.values() if provider})
+
+        if settings.show_survivorship_warning:
+            if "yfinance" in providers_used:
+                warnings.append(
+                    "yfinance data is free/lagged and may be survivorship-biased (current tickers only). "
+                    "Use survivorship-free point-in-time universes before production decisions."
+                )
+            else:
+                warnings.append(
+                    "Provider bars alone do not remove survivorship bias. "
+                    "Use point-in-time universes that include delisted names before production decisions."
+                )
+
+        if len(set(provider_map.values())) > 1:
+            warnings.append(
+                "Mixed provider run: some tickers used fallback providers due to upstream errors/rate-limits."
+            )
+        if settings.data_source != "auto" and settings.data_source not in providers_used:
+            warnings.append(
+                f"Configured DATA_SOURCE '{settings.data_source}' was unavailable. Fallback providers were used."
+            )
 
         metadata = {
             "run_seconds": round(elapsed, 2),
             "bar_count": int(len(close)),
+            "data_source_config": settings.data_source,
+            "data_providers_used": providers_used,
+            "data_provider_by_ticker": provider_map,
             "strategies_requested": len(selected_ids),
             "strategies_completed": len(ranking),
             "strategies_skipped": len(skipped),
@@ -234,6 +280,13 @@ class TournamentEngine:
                 "borrow_cost_bps_annual": request.borrow_cost_bps_annual,
                 "execution": "signal at t, execution at t+1"
             },
+            "statistical_method": {
+                "bootstrap_samples": "default",
+                "dsr_trials": selected_implemented_count,
+                "white_reality_check_pvalue": round(float(wrc_pvalue), 6),
+                "pbo_estimate": round(float(pbo_estimate), 6),
+            },
+            "warnings": warnings,
         }
 
         benchmark = self._benchmark(close, request.initial_capital)
