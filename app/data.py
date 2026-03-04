@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,21 @@ def _truncate_error_detail(raw: str, max_chars: int = 220) -> str:
     return clean[:max_chars].rstrip() + "..."
 
 
+def _retry_sleep_seconds(attempt: int, retry_after_header: str | None) -> float:
+    base = max(0.5, float(settings.polygon_retry_backoff_seconds))
+    max_sleep = max(base, float(settings.polygon_retry_max_sleep_seconds))
+
+    if retry_after_header:
+        try:
+            parsed = float(retry_after_header.strip())
+            if parsed > 0:
+                return min(max_sleep, parsed)
+        except ValueError:
+            pass
+
+    return min(max_sleep, base * (2**attempt))
+
+
 def _download_single_ticker_yfinance(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     try:
         frame = yf.download(
@@ -127,22 +143,53 @@ def _download_single_ticker_polygon(ticker: str, start_date: str, end_date: str)
         "apiKey": settings.polygon_api_key,
     }
 
-    try:
-        response = requests.get(
-            url,
-            params=params,
-            timeout=settings.data_request_timeout_seconds,
-        )
-    except requests.RequestException as exc:
-        raise DataLoadError(f"Polygon request failed for '{ticker}': {exc}") from exc
+    max_attempts = max(0, int(settings.polygon_retry_attempts))
+    response: requests.Response | None = None
 
-    if response.status_code == 429:
-        raise DataLoadError(f"Polygon rate limit hit for '{ticker}' (HTTP 429).")
-    if response.status_code >= 400:
-        raise DataLoadError(
-            f"Polygon error for '{ticker}' (HTTP {response.status_code}): "
-            f"{_truncate_error_detail(response.text)}"
-        )
+    for attempt in range(max_attempts + 1):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                timeout=settings.data_request_timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            if attempt < max_attempts:
+                sleep_seconds = _retry_sleep_seconds(attempt, None)
+                time.sleep(sleep_seconds)
+                continue
+            raise DataLoadError(f"Polygon request failed for '{ticker}': {exc}") from exc
+
+        if response.status_code == 429:
+            if attempt < max_attempts:
+                sleep_seconds = _retry_sleep_seconds(attempt, response.headers.get("Retry-After"))
+                time.sleep(sleep_seconds)
+                continue
+            raise DataLoadError(
+                f"Polygon rate limit hit for '{ticker}' (HTTP 429). "
+                "Consider fewer tickers/time range or enable yfinance fallback."
+            )
+
+        if response.status_code >= 500:
+            if attempt < max_attempts:
+                sleep_seconds = _retry_sleep_seconds(attempt, response.headers.get("Retry-After"))
+                time.sleep(sleep_seconds)
+                continue
+            raise DataLoadError(
+                f"Polygon upstream error for '{ticker}' (HTTP {response.status_code}): "
+                f"{_truncate_error_detail(response.text)}"
+            )
+
+        if response.status_code >= 400:
+            raise DataLoadError(
+                f"Polygon error for '{ticker}' (HTTP {response.status_code}): "
+                f"{_truncate_error_detail(response.text)}"
+            )
+
+        break
+
+    if response is None:
+        raise DataLoadError(f"Polygon returned no response for ticker '{ticker}'.")
 
     try:
         payload = response.json()

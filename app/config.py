@@ -60,6 +60,9 @@ class Settings:
     polygon_base_url: str = os.getenv("POLYGON_BASE_URL", "https://api.polygon.io").strip()
     polygon_adjusted_bars: bool = _parse_bool(os.getenv("POLYGON_ADJUSTED_BARS"), True)
     polygon_request_limit: int = int(os.getenv("POLYGON_REQUEST_LIMIT", "50000"))
+    polygon_retry_attempts: int = int(os.getenv("POLYGON_RETRY_ATTEMPTS", "3"))
+    polygon_retry_backoff_seconds: float = float(os.getenv("POLYGON_RETRY_BACKOFF_SECONDS", "2"))
+    polygon_retry_max_sleep_seconds: float = float(os.getenv("POLYGON_RETRY_MAX_SLEEP_SECONDS", "30"))
     allowed_origins: list[str] = None  # type: ignore[assignment]
     rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
     rate_limit_max_requests: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "10"))

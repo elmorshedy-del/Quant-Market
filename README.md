@@ -94,6 +94,9 @@ POLYGON_API_KEY=your_key_here
 DATA_SOURCE_ALLOW_FALLBACK=true
 DATA_SOURCE_FALLBACK_ORDER=polygon,yfinance
 DATA_REQUEST_TIMEOUT_SECONDS=30
+POLYGON_RETRY_ATTEMPTS=3
+POLYGON_RETRY_BACKOFF_SECONDS=2
+POLYGON_RETRY_MAX_SLEEP_SECONDS=30
 DATA_CACHE_DIR=data/cache
 ALLOWED_ORIGINS=https://your-frontend-domain.com
 RATE_LIMIT_WINDOW_SECONDS=60
@@ -108,4 +111,5 @@ DEFAULT_RISK_FREE_RATE_ANNUAL=0.02
 - This is a research backtesting environment, not production execution software.
 - Fundamental and intraday strategies require richer data feeds for full-fidelity implementation.
 - Paid bars improve reliability, but survivorship-free constituent history is still required for institutional-quality validation.
+- Free Polygon tiers can hit HTTP 429 quickly on multi-ticker scans; use retries/fallback or a paid tier.
 - Always perform paper trading before live deployment.
