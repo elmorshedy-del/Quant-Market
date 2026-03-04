@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+.python-version
+.DS_Store
+.env
+.env.*
+!.env.example
+data/cache/*.csv
+results/*.json

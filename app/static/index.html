@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quant Strategy Tournament (GLM-5 Aligned)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --ink: #0c1b2a;
+        --muted: #556273;
+        --line: #dfe3e8;
+        --accent: #0f766e;
+        --accent-2: #0ea5e9;
+        --danger: #b91c1c;
+        --shadow: 0 14px 40px rgba(9, 30, 66, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        background:
+          radial-gradient(circle at 5% 5%, rgba(14, 165, 233, 0.18), transparent 40%),
+          radial-gradient(circle at 95% 0%, rgba(15, 118, 110, 0.16), transparent 40%),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      .wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px 64px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.4rem, 2vw, 2rem);
+        letter-spacing: -0.02em;
+      }
+
+      .subtitle {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .grid {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+      }
+
+      .panel .head {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        font-weight: 700;
+      }
+
+      .panel .body {
+        padding: 14px 16px;
+      }
+
+      label {
+        display: block;
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        padding: 9px 10px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 72px;
+        resize: vertical;
+      }
+
+      .field {
+        margin-bottom: 12px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      button {
+        border: none;
+        background: linear-gradient(100deg, var(--accent), var(--accent-2));
+        color: #fff;
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      .stats {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 0.78rem;
+        background: #f8fafc;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.87rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 8px 6px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      th {
+        font-size: 0.73rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      .ok {
+        color: var(--accent);
+      }
+
+      .bad {
+        color: var(--danger);
+      }
+
+      .hint {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Quant Strategy Tournament</h1>
+      <p class="subtitle">GLM-5-paper-aligned backtesting console for lagged free market data.</p>
+
+      <section class="grid">
+        <aside class="panel">
+          <div class="head">Run Config</div>
+          <div class="body">
+            <div class="field">
+              <label for="tickers">Tickers (comma-separated)</label>
+              <textarea id="tickers">AAPL,MSFT,NVDA,AMZN,META,GOOGL,SPY,QQQ</textarea>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="start">Start Date</label>
+                <input id="start" type="date" value="2024-01-01" />
+              </div>
+              <div class="field">
+                <label for="end">End Date</label>
+                <input id="end" type="date" value="2026-01-01" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="capital">Initial Capital</label>
+                <input id="capital" type="number" value="100000" />
+              </div>
+              <div class="field">
+                <label for="cost">Trading Cost (bps)</label>
+                <input id="cost" type="number" value="10" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="borrow">Borrow Cost (bps/yr)</label>
+                <input id="borrow" type="number" value="50" />
+              </div>
+              <div class="field">
+                <label for="rf">Risk Free Rate (annual)</label>
+                <input id="rf" type="number" step="0.001" value="0.02" />
+              </div>
+            </div>
+
+            <button id="runBtn">Run Tournament</button>
+            <p class="hint">Execution assumption: signal at <span class="mono">t</span>, fill at <span class="mono">t+1</span>.</p>
+            <p id="status" class="hint mono"></p>
+          </div>
+        </aside>
+
+        <section class="panel">
+          <div class="head">Results</div>
+          <div class="body">
+            <div id="stats" class="stats"></div>
+            <div style="margin-top:12px; overflow:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Strategy</th>
+                    <th>Family</th>
+                    <th>P&amp;L</th>
+                    <th>CAGR</th>
+                    <th>Sharpe</th>
+                    <th>MDD</th>
+                    <th>Repeatability</th>
+                    <th>Skill Prob</th>
+                  </tr>
+                </thead>
+                <tbody id="rankingBody"></tbody>
+              </table>
+            </div>
+
+            <h3 style="margin-top:18px;">Skipped / Planned</h3>
+            <div style="overflow:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Strategy</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="skippedBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      function fmtPct(v) {
+        return `${Number(v).toFixed(2)}%`;
+      }
+
+      function fmtNum(v) {
+        return Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+
+      function setStatus(text, isError = false) {
+        const el = $("status");
+        el.textContent = text;
+        el.className = `hint mono ${isError ? "bad" : "ok"}`;
+      }
+
+      function rowHtml(rank, r) {
+        const pnlCls = r.expected_pnl >= 0 ? "ok" : "bad";
+        return `
+          <tr>
+            <td>${rank}</td>
+            <td>${r.name}</td>
+            <td>${r.family}</td>
+            <td class="${pnlCls}">$${fmtNum(r.expected_pnl)}</td>
+            <td>${fmtPct(r.cagr_pct)}</td>
+            <td>${Number(r.sharpe).toFixed(2)}</td>
+            <td>${fmtPct(r.max_drawdown_pct)}</td>
+            <td>${Number(r.repeatability_score).toFixed(3)}</td>
+            <td>${fmtPct(r.probability_of_skill * 100)}</td>
+          </tr>
+        `;
+      }
+
+      function skippedRowHtml(r) {
+        return `
+          <tr>
+            <td>${r.name}</td>
+            <td>${r.skipped_reason || "Planned / unavailable in current data mode"}</td>
+          </tr>
+        `;
+      }
+
+      async function runTournament() {
+        const runBtn = $("runBtn");
+        runBtn.disabled = true;
+        setStatus("Running tournament...");
+
+        const payload = {
+          tickers: $("tickers").value.split(",").map((x) => x.trim()).filter(Boolean),
+          start_date: $("start").value,
+          end_date: $("end").value,
+          initial_capital: Number($("capital").value),
+          trading_cost_bps: Number($("cost").value),
+          borrow_cost_bps_annual: Number($("borrow").value),
+          risk_free_rate_annual: Number($("rf").value)
+        };
+
+        try {
+          const res = await fetch("/api/tournament/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || "Request failed");
+          }
+
+          const rankingBody = $("rankingBody");
+          rankingBody.innerHTML = data.ranking
+            .map((r, idx) => rowHtml(idx + 1, r))
+            .join("");
+
+          const skippedBody = $("skippedBody");
+          skippedBody.innerHTML = data.skipped
+            .map((r) => skippedRowHtml(r))
+            .join("");
+
+          $("stats").innerHTML = `
+            <span class="chip">Run: <span class="mono">${data.run_id.slice(0, 8)}</span></span>
+            <span class="chip">Bars: ${data.metadata.bar_count}</span>
+            <span class="chip">Completed: ${data.metadata.strategies_completed}</span>
+            <span class="chip">Skipped: ${data.metadata.strategies_skipped}</span>
+            <span class="chip">Runtime: ${data.metadata.run_seconds}s</span>
+            <span class="chip">Benchmark CAGR: ${fmtPct(data.benchmark.cagr_pct)}</span>
+          `;
+
+          setStatus(`Done in ${data.metadata.run_seconds}s`);
+        } catch (error) {
+          setStatus(error.message || "Failed", true);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      $("runBtn").addEventListener("click", runTournament);
+    </script>
+  </body>
+</html>
