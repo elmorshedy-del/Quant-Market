@@ -50,14 +50,27 @@ def _resolve_provider_chain() -> list[str]:
             for source in settings.data_source_fallback_order
             if source in SUPPORTED_DATA_SOURCES and source != "auto"
         ]
-        return auto_chain if auto_chain else ["yfinance"]
+        chain = auto_chain if auto_chain else ["yfinance"]
+    else:
+        chain = [primary]
+        if settings.data_source_allow_fallback:
+            for source in settings.data_source_fallback_order:
+                if source in SUPPORTED_DATA_SOURCES and source not in chain and source != "auto":
+                    chain.append(source)
 
-    chain = [primary]
-    if settings.data_source_allow_fallback:
-        for source in settings.data_source_fallback_order:
-            if source in SUPPORTED_DATA_SOURCES and source not in chain and source != "auto":
-                chain.append(source)
-    return chain
+    usable_chain: list[str] = []
+    for source in chain:
+        if source == "polygon" and not settings.polygon_api_key:
+            continue
+        usable_chain.append(source)
+
+    if not usable_chain:
+        raise DataLoadError(
+            "No usable data providers configured. "
+            "Set DATA_SOURCE=yfinance or configure POLYGON_API_KEY for polygon."
+        )
+
+    return usable_chain
 
 
 def _cache_key(tickers: list[str], start_date: str, end_date: str, provider_chain: list[str]) -> str:
@@ -143,21 +156,41 @@ def _download_single_ticker_polygon(ticker: str, start_date: str, end_date: str)
         raise DataLoadError(f"Polygon returned no data for '{ticker}' (status={status}, message={message}).")
 
     frame = pd.DataFrame(results)
-    required_columns = {"t", "c", "v"}
-    missing = required_columns - set(frame.columns)
-    if missing:
-        raise DataLoadError(f"Polygon payload missing columns for '{ticker}': {', '.join(sorted(missing))}.")
 
-    index = pd.to_datetime(frame["t"], unit="ms", utc=True).dt.tz_localize(None)
+    def pick_column(candidates: tuple[str, ...]) -> str | None:
+        for name in candidates:
+            if name in frame.columns:
+                return name
+        return None
+
+    time_col = pick_column(("t", "timestamp"))
+    close_col = pick_column(("c", "close", "Close"))
+    volume_col = pick_column(("v", "volume", "Volume"))
+    if time_col is None or close_col is None or volume_col is None:
+        cols = ", ".join(map(str, frame.columns.tolist()))
+        raise DataLoadError(
+            f"Polygon payload missing expected bar columns for '{ticker}'. "
+            f"Found columns: [{cols}]"
+        )
+
+    index = pd.to_datetime(frame[time_col], unit="ms", utc=True, errors="coerce").dt.tz_localize(None)
     normalized = pd.DataFrame(
         {
-            "Close": pd.to_numeric(frame["c"], errors="coerce"),
-            "Volume": pd.to_numeric(frame["v"], errors="coerce"),
+            "Close": pd.to_numeric(frame[close_col], errors="coerce"),
+            "Volume": pd.to_numeric(frame[volume_col], errors="coerce"),
         },
         index=index,
     )
+    normalized = normalized[normalized.index.notna()]
     normalized = normalized[~normalized.index.duplicated(keep="last")]
-    return _normalize_download_frame(normalized, ticker)
+    try:
+        return _normalize_download_frame(normalized, ticker)
+    except DataLoadError as exc:
+        sample_keys = ", ".join(map(str, list(results[0].keys()))) if results else "none"
+        status = payload.get("status", "unknown")
+        raise DataLoadError(
+            f"{exc} Polygon status={status}; first-row keys=[{sample_keys}]"
+        ) from exc
 
 
 def _download_single_ticker(
