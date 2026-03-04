@@ -82,7 +82,7 @@ docker run -p 8000:8000 quant-tournament
 - Start command:
 
 ```bash
-python app/serve.py
+python -m app.serve
 ```
 
 Recommended Railway env vars:

@@ -13,4 +13,4 @@ COPY . /app
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["python", "app/serve.py"]
+CMD ["python", "-m", "app.serve"]
