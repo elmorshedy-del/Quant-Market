@@ -1,13 +1,33 @@
 # Resting bids on cheap in-play legs (Kalshi): research log
 
-Status: **complete for this round** (2026-10-03). 9 soccer leagues + NBA, NFL, WNBA, NHL, MLB, ATP, WTA:
-about 21,700 games since spring 2025.
+Status: round 1 complete (2026-10-03): broad, no-selection baselines across 9 soccer leagues + NBA,
+NFL, WNBA, NHL, MLB, ATP, WTA (about 21,700 games). Round 2 (thesis-driven MLS end-game study) in
+`MLS_ENDGAME.md`.
+
+## Corrections (read first)
+
+1. **The "buy after a jump" test is NOT a test of Football-Bot.** It used 1-minute candles, any
+   >=10c/20c one-minute move at any time in the game, and entry up to a minute late. Football-Bot
+   trades sub-second sweeps with sibling confirmation, late in the game, with tuned entry/exit. These
+   results say nothing about that strategy; the earlier wording ("this is the Football-Bot approach",
+   "would not take Football-Bot live") is withdrawn.
+2. **Late-window clock error for MLS (and possibly other leagues with delayed kickoffs).** The match
+   minute was computed as kickoff + minute (+18 in the second half) from the listed start time. True
+   goal times show EPL/La Liga kick off on time (offset ~1-2 min), but MLS kicks off ~9-10 min after
+   the listed start, so the "75'-85'" window was really ~65'-75' for MLS. Section 5 below is
+   therefore unreliable for MLS (one of the six confirmation leagues). Broad kickoff-to-settlement
+   results are unaffected (orders placed before kickoff simply rest).
+3. **Regime caveat.** 2026 includes the World Cup period, with unusually heavy, bot-driven soccer
+   volume; the decay in soccer results may partly reflect that regime rather than a permanent change.
+4. These round-1 tests are deliberately broad baselines (no game selection, no state conditioning,
+   no dissection of winners vs losers). They answer "does the naive version work", not "can a
+   selective version work".
 
 ## Question
 
 When a Kalshi sports leg is cheap during a game, does a resting buy order (placed below the
 market, filled when sellers come to it) win more often than its price implies, after fees?
-Compared against: buying right after a big jump (taker, the Football-Bot approach), and resting
+Compared against: buying right after a big one-minute jump (a crude taker proxy), and resting
 bids on favourites.
 
 ## Data
@@ -99,8 +119,8 @@ Realistic = winning fills at 91% of size (from the soccer trade sample).
 
 ## Conclusions
 
-1. **Buying after a jump (taker) loses in every sport and every variant.** This is the
-   Football-Bot approach; the evidence against it is now broad and consistent.
+1. **The crude minute-level "buy after a jump" proxy loses in every sport.** It is not
+   Football-Bot's strategy (see Corrections) and says nothing about sub-second sweep trading.
 2. **Resting bids on cheap legs had a real edge in 2025 in every sport (+14% to +52%).** It has
    decayed everywhere as Kalshi liquidity grew; with realistic fills the latest period is zero or
    negative in every sport, and significantly negative in WTA and NBA. Tennis lost it first
