@@ -8,7 +8,9 @@
 A spec is a dict:
     {"filters": [["role", "in", ["leader"]], ["goal_diff", "==", 1], ["ask_E", "between", [70, 95]]],
      "order":   {"type": "rest", "level": {"mode": "bid_minus", "value": 2},
-                "cancel_after_s": 600},                                       # optional; or {"type": "taker"}
+                "active_from_s": 0,                                           # optional: order live from entry+X s
+                "cancel_after_s": 600,                                        # optional: cancelled at entry+X s
+                "cancel_on_jump": {"move": 8, "window_s": 60, "latency_s": 2}},   # optional, see below
      "exit":    {"type": "hold"},                                             # or {"type": "tp", "value": 60}
      "fill":    {"queue_share": 0.0},                                         # optional
      "contract": "yes"}                                                       # or "no" (bet against the leg)
@@ -23,6 +25,10 @@ Fills (conservative): only trades after entry printed strictly below b fill it, 
 exactly at b add queue_share * their size. Take-profit sells fill only on trades strictly above the price.
 Taker orders buy Q at ask_E. Fees: Kalshi maker 1.75% / taker 7% of C*P*(1-P), rounded up per fill.
 Unfilled orders are cancelled at the end. Held contracts settle at 100 (leg wins) or 0.
+cancel_on_jump: the bot pulls the resting order when the leg's trade price moves >= move cents away from
+the median of the previous window_s seconds (a goal / big news). The cancel only takes effect latency_s
+seconds after the jump starts, so trades inside that latency can still fill the order (realistic).
+active_from_s: the order is placed at entry prices but only goes live entry+X seconds later.
 contract "no" buys the NO side of the leg: its bid/ask are 100-ask_E / 100-bid_E, its trade prices are
 100-yes_price, and it pays 100 when the leg does NOT win. Level modes then refer to the NO side's quotes.
 """
@@ -108,6 +114,26 @@ def _level(row, lv):
     raise ValueError(mode)
 
 
+_JUMP_CACHE = {}
+
+
+def _first_jump(ticker, no, t, p, t0, move, window_s):
+    key = (ticker, no, round(t0, 3), move, window_s)
+    if key in _JUMP_CACHE:
+        return _JUMP_CACHE[key]
+    res = np.inf
+    for i in np.flatnonzero(t >= t0):
+        lo = np.searchsorted(t, t[i] - window_s)
+        hi = np.searchsorted(t, t[i] - 5)
+        if hi <= lo:
+            continue
+        if abs(p[i] - np.median(p[lo:hi])) >= move:
+            res = t[i]
+            break
+    _JUMP_CACHE[key] = res
+    return res
+
+
 def simulate(spec, legs, book):
     sel = apply_filters(legs, spec.get("filters"))
     order, exit_ = spec["order"], spec.get("exit", {"type": "hold"})
@@ -134,7 +160,13 @@ def simulate(spec, legs, book):
             if b < 1 or b >= row.ask_E:
                 continue
             rem = Q
-            live = after & (t < row.entry_ts + order.get("cancel_after_s", 1e9))
+            t_on = row.entry_ts + order.get("active_from_s", 0)
+            t_off = row.entry_ts + order.get("cancel_after_s", 1e9)
+            cj = order.get("cancel_on_jump")
+            if cj:
+                tj = _first_jump(row.ticker, no, t, p, row.entry_ts, cj.get("move", 8), cj.get("window_s", 60))
+                t_off = min(t_off, tj + cj.get("latency_s", 2))
+            live = (t >= t_on) & (t < t_off)
             for i in np.flatnonzero(live & (p <= b)):
                 take = n[i] if p[i] < b else n[i] * qs
                 take = min(rem, take)

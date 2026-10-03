@@ -1,0 +1,101 @@
+[
+ {
+  "name": "placement: Tied-game late-winner bid: rest YES at 3c on each team leg (tied at ~82')",
+  "spec": {
+   "filters": [
+    [
+     "role",
+     "==",
+     "tied_team"
+    ]
+   ],
+   "order": {
+    "type": "rest",
+    "level": {
+     "mode": "abs",
+     "value": 3
+    },
+    "cancel_after_s": 1500
+   },
+   "exit": {
+    "type": "hold"
+   },
+   "fill": {
+    "queue_share": 0.0
+   },
+   "contract": "yes"
+  }
+ },
+ {
+  "name": "adverse: R1 deep draw bid in tied games (air-pocket catcher)",
+  "spec": {
+   "filters": [
+    [
+     "role",
+     "in",
+     [
+      "draw_tied"
+     ]
+    ],
+    [
+     "mid_E",
+     ">=",
+     30
+    ],
+    [
+     "spread_E",
+     "<=",
+     10
+    ]
+   ],
+   "order": {
+    "type": "rest",
+    "level": {
+     "mode": "frac_mid",
+     "value": 0.2
+    }
+   },
+   "exit": {
+    "type": "hold"
+   },
+   "fill": {
+    "queue_share": 0.0
+   },
+   "contract": "yes"
+  }
+ },
+ {
+  "name": "adverse: R2 broad tied-game deep YES bids (superset of R1, not independent)",
+  "spec": {
+   "filters": [
+    [
+     "role",
+     "in",
+     [
+      "draw_tied",
+      "tied_team"
+     ]
+    ],
+    [
+     "spread_E",
+     "<=",
+     10
+    ]
+   ],
+   "order": {
+    "type": "rest",
+    "level": {
+     "mode": "frac_mid",
+     "value": 0.2
+    }
+   },
+   "exit": {
+    "type": "hold"
+   },
+   "fill": {
+    "queue_share": 0.0
+   },
+   "contract": "yes"
+  }
+ }
+]
