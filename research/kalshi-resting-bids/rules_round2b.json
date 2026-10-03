@@ -1,0 +1,42 @@
+[
+ {
+  "name": "favourite: Tick-floor longshot seller: resting NO at the touch on trailers 2+ goals down at 82'",
+  "spec": {
+   "filters": [
+    [
+     "role",
+     "==",
+     "trailer"
+    ],
+    [
+     "goal_diff",
+     ">=",
+     2
+    ],
+    [
+     "mid_E",
+     "<=",
+     10
+    ]
+   ],
+   "order": {
+    "type": "rest",
+    "level": {
+     "mode": "bid"
+    },
+    "cancel_on_jump": {
+     "move": 3,
+     "window_s": 60,
+     "latency_s": 2
+    }
+   },
+   "exit": {
+    "type": "hold"
+   },
+   "fill": {
+    "queue_share": 0.5
+   },
+   "contract": "no"
+  }
+ }
+]

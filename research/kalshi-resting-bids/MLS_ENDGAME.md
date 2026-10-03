@@ -1,6 +1,7 @@
 # MLS end-game resting orders (round 2): research log
 
-Status: in progress (2026-10-03). Resting (maker) orders only, per the brief.
+Status: complete for this round (2026-10-03). Resting (maker) orders only, per the brief.
+6 theses, ~2,700 simulator variants, 4 frozen rules, all tested on the sealed holdout.
 
 ## Setup
 
@@ -55,7 +56,43 @@ Not confirmed. Discovery profits depended on a handful of games (dropping the to
 the three rules to about -60%), and the market changed: volume in the 10 minutes before entry rose
 from ~175 contracts (2025 Q2) to ~12,800 (2026 Q2) and ~30,700 (Jul-Sep 2026); spreads 4c -> 1c.
 
-## Open
+## Stoppage, liquidity and favourite theses (second run)
 
-Three theses (stoppage-time decay, liquidity regime, favourite-side resting orders) are being re-run;
-their first run was cut off by a usage limit.
+- Stoppage-time decay (129 variants, 0 rules): late-goal risk stays flat or rises into stoppage, and
+  in 1-goal games stoppage goals come mostly from the trailer; draws in 1-goal games look 2-4c rich and
+  leaders 2-4c cheap from 82' into stoppage, but not significantly on liquid books. A fixed-price
+  resting order cannot collect the decay: YES buys on decaying legs are filled by the decay (-37% to
+  -48%); NO offers go stale above the market and only fill on goals (-1% to -16%). Only quiet fills in
+  the first ~60 s earn a small premium; short time-to-live helps but never reaches significance.
+- Liquidity (1,400 variants, 0 rules): liquid 2026 books cut maker losses 3-4x vs thin 2025 books, but
+  only to break-even; the queue-position assumption moves results more than any placement choice.
+- Favourite side (255 variants, 1 rule): resting NO at the 1c touch on trailers 2+ goals down: +1.2%
+  with no losses in discovery (101 games) and holdout (53 games). Both reviewers rejected it: every
+  fill earns ~1c, so the range is an artifact of zero observed comebacks; one comeback erases the whole
+  sample and 0/154 cannot exclude a comeback rate above the ~1.2% break-even; the 1c queue is the most
+  crowded on the venue, so queue_share 0.5 is optimistic. Classified as unproven tail-risk carry.
+- Informational, not frozen: the best near-miss (NO on the 1-goal draw one tick inside the spread,
+  cancelled after 60 s, strict fills) was +9% [-4%, +20%] in discovery and -17% [-44%, +7%] in holdout.
+
+## Data-quality caveat
+
+About 10% of games have a state at entry that contradicts prices (e.g. labelled 0-2 but priced as
+tied), most likely from the estimated match clock (entry earlier than 82' in real time). Analysts
+re-ran key results without those legs; conclusions did not change.
+
+## Conclusion
+
+Static resting orders in the MLS end game have no robust edge on this data. The reason is adverse
+selection: a fixed-price order is left behind on the quiet path and swept when the game turns, and
+the 2-5c favourite-longshot gap at 82' is too small to pay for that. The one family that looked
+strong in discovery (deep bids in tied games) failed on the holdout as liquidity grew ~25x.
+
+## Most promising lead (not testable with this simulator)
+
+The trade tape shows passive sellers of the draw in 1-goal games and of tied team legs earning about
++3.5 to +8c per contract on trades before any goal; the loss comes from fills at goal time. Capturing
+that needs dynamic quoting (re-pricing the offer every few seconds as the leg decays, cancelling
+within well under a second on goals), i.e. market making, which matches the Reddit trader's profile
+(maker-only, ~350k small trades, liquidity rewards). Testing it needs order-book data with queue
+modelling (e.g. Football-Bot's raw L2 recordings since Aug 2026, which have gaps) and the details of
+Kalshi's liquidity reward programme.
