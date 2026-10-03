@@ -1,6 +1,7 @@
 # Resting bids on cheap in-play legs (Kalshi): research log
 
-Status: **interim** (2026-10-03). Soccer results below; fill-size check and other sports in progress.
+Status: **complete for this round** (2026-10-03). 9 soccer leagues + NBA, NFL, WNBA, NHL, MLB, ATP, WTA:
+about 21,700 games since spring 2025.
 
 ## Question
 
@@ -30,7 +31,7 @@ bids on favourites.
 - Unit of statistics: the game (all fills in one game share one outcome). 95% ranges are bootstrap
   over games.
 
-## Findings so far (soccer)
+## Findings: soccer
 
 ### 1. Buying right after a jump (taker) loses
 EPL, 413 games: -9% to -20% per dollar for every variant (jump >= 10c or 20c, fast or slow entry,
@@ -62,15 +63,67 @@ Bids at ~75', cancelled at ~85' (the strongest slice in the discovery data):
 +88% in discovery (selected, so biased up) but **+21% [-4%, +49%] on the six unseen leagues**.
 Treat as unconfirmed.
 
-## Open checks
+### 6. Fill sizes (trade-level sample: 180 games, 540 legs, 1.25M trades, no block trades)
+- 98-100% of candle fills would have filled all 100 contracts from trades strictly below the bid
+  (median volume below the bid per filled order: 3.6k contracts in 2025, 73k in Jul-Sep 2026).
+- But fills are lopsided: losing legs always fill completely (they get dumped as they die);
+  winning legs fill only 91 of 100 contracts on average (96 counting trades at the bid price),
+  and 15% of winning fills are partial. Brief dips that later win have less volume below the bid.
+- Applying that to all 3,596 soccer games:
 
-- Fill size: candles cannot show how many contracts the sellers dumped below our price; a
-  trade-level sample is being downloaded to measure realistic fill sizes.
-- Tennis, MLB, NBA, NHL, NFL, WNBA (downloading).
+| Period | Full fills | Winners 96% | Winners 91% |
+|---|---|---|---|
+| 2025 | +52% [+40%, +64%] | +47% | +40% [+28%, +51%] |
+| 2026 Jan-Jun | +31% [+20%, +42%] | +27% | +20% [+10%, +30%] |
+| 2026 Jul-Sep | +6% [-9%, +21%] | +2% | **-3% [-18%, +11%]** |
+
+Soccer verdict: a real edge in 2025 and early 2026 that has been competed away; the latest
+quarter is indistinguishable from zero after realistic fills.
+
+## Other sports (soccer rules applied unchanged = out-of-sample by sport)
+
+Strategy A = resting bids at 3/5/7/10c from the start of play, held to settlement.
+"Latest" = Jul-Sep 2026, except NBA/NHL (season ended in June, so Jan-Jun 2026).
+Realistic = winning fills at 91% of size (from the soccer trade sample).
+
+| Sport | Games | A, all periods (full fills) | A, 2025 (full fills) | A, latest (realistic) | Buy after jump (B) |
+|---|---|---|---|---|---|
+| Soccer (9 leagues) | 3,596 | +34% [+26%, +41%] | +52% | -3% [-18%, +11%] | -9% to -20% (EPL) |
+| MLB | 4,608 | +9% [+1%, +18%] | +19% | -14% [-29%, +1%] | -5% to -20% |
+| ATP | 4,252 | +2% [-8%, +12%] | +36% | -17% [-33%, +0%] | -8% to -28% |
+| WTA | 4,246 | +6% [-3%, +16%] | +49% | -20% [-36%, -5%] | -9% to -32% |
+| NHL | 1,606 | +9% [-6%, +25%] | +22% | -10% [-28%, +10%] | -5% to -12% |
+| NBA | 1,436 | -3% [-19%, +12%] | +14% | -24% [-41%, -7%] | -2% to -8% |
+| WNBA | 647 | +18% [-6%, +42%] | +27% | +1% [-40%, +43%] | -7% to -21% |
+| NFL | 423 | +11% [-20%, +42%] | +17% | -17% [-65%, +37%] | -3% to -12% |
+
+## Conclusions
+
+1. **Buying after a jump (taker) loses in every sport and every variant.** This is the
+   Football-Bot approach; the evidence against it is now broad and consistent.
+2. **Resting bids on cheap legs had a real edge in 2025 in every sport (+14% to +52%).** It has
+   decayed everywhere as Kalshi liquidity grew; with realistic fills the latest period is zero or
+   negative in every sport, and significantly negative in WTA and NBA. Tennis lost it first
+   (by early 2026), soccer last (gone by Jul-Sep 2026).
+3. **Resting bids on favourites lose; far take-profits do worse than holding.**
+4. The simple, rule-based version of the Reddit strategy is not profitable today on this data. If
+   that trader is really still profitable, the edge must come from things not modelled here:
+   hand-picked games ("x factor"), Kalshi liquidity rewards for resting orders (he mentions them;
+   not included here), faster cancel/re-pricing, or luck over seven months of fat-tailed returns.
+
+## Caveats
+
+- 1-minute candles: fills are judged per minute, not per message; queue position at the exact bid
+  price is not modelled (the 91%/96% fill factors bracket it).
+- Fill-size factors come from a soccer sample and are applied to all sports.
+- Maker fee multiplier 1 everywhere (MLB's series lists 0.5, so MLB fees are slightly overstated;
+  negligible at 3-10c).
+- Start times: Kalshi milestones (soccer partly via expected expiration - 3h).
 
 ## Files
 
 `download.py` (markets + candles), `enrich.py` (milestone kickoffs, fee schedules),
 `kickoff_est.py` (soccer kickoff estimate), `legs.py` (minute grid, legs, clock),
-`study.py` (overview, calibrate, grid, confirm, shock), `trades_sample.py` (trade-level sample).
+`study.py` (overview, calibrate, grid, confirm, shock), `trades_sample.py` (trade-level sample),
+`fillsize.py` (fill sizes from trades), `sports.py` (same rules on other sports).
 Data is not committed; `python3 download.py SERIES...` rebuilds it.
