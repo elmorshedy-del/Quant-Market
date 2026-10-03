@@ -111,6 +111,20 @@ Realistic = winning fills at 91% of size (from the soccer trade sample).
    hand-picked games ("x factor"), Kalshi liquidity rewards for resting orders (he mentions them;
    not included here), faster cancel/re-pricing, or luck over seven months of fat-tailed returns.
 
+## Robustness of "the edge is gone" (all sports pooled, strategy A)
+
+| Quarter | Games | Return, winners 91% filled |
+|---|---|---|
+| 2025 Q2 | 1,395 | +36% [+20%, +52%] |
+| 2025 Q3 | 3,217 | +22% [+12%, +32%] |
+| 2025 Q4 | 2,827 | +19% [+9%, +29%] |
+| 2026 Q1 | 4,337 | -3% [-11%, +5%] |
+| 2026 Q2 | 4,718 | -3% [-10%, +5%] |
+| 2026 Q3 | 4,231 | -12% [-19%, -5%] |
+
+- Jul-Sep 2026 pooled: -4% [-12%, +4%] even assuming every fill is complete; -13% [-20%, -5%] realistic.
+- Every bid level (3/5/7/10c) is negative in Jul-Sep 2026; dropping any one sport leaves it negative.
+
 ## Caveats
 
 - 1-minute candles: fills are judged per minute, not per message; queue position at the exact bid
