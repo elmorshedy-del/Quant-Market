@@ -1,0 +1,25 @@
+{
+  "demo_id": "demo-20261005T221146-b8f8",
+  "workspaces": {
+    "dataset-1": "/tmp/claude-0/-home-user-Quant-Market/df163b49-c1ec-5647-8cab-004a08ce7907/scratchpad/pilot-demos/demo-20261005T221146-b8f8/dataset-1",
+    "dataset-2": "/tmp/claude-0/-home-user-Quant-Market/df163b49-c1ec-5647-8cab-004a08ce7907/scratchpad/pilot-demos/demo-20261005T221146-b8f8/dataset-2"
+  },
+  "sealed_key": "/tmp/claude-0/-home-user-Quant-Market/df163b49-c1ec-5647-8cab-004a08ce7907/scratchpad/pilot-sealed/demo-20261005T221146-b8f8/key.json",
+  "pass_criteria_declared_before_run": {
+    "split": {
+      "claim_must_be": [
+        "multiple_processes"
+      ],
+      "min_captured_gain": 0.5,
+      "require_ci_improvement_over_pooled": true
+    },
+    "single": {
+      "claim_must_be": [
+        "single_process",
+        "insufficient_evidence"
+      ],
+      "max_mse_ratio_vs_pooled": 1.01
+    }
+  },
+  "created_at": 1791238306.8001351
+}

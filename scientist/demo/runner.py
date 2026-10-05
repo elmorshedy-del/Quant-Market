@@ -222,7 +222,7 @@ def evaluate_demo(demo_id: str, *, cases: str = "all") -> dict[str, Any]:
                 shutil.copy2(ws / rel, case_dir / Path(rel).name)
         for rel in ("research/predictor", "research/tools", f"research/runs/{run_id}", f"research/audits/{run_id}"):
             if (ws / rel).exists():
-                _copy_tree(ws / rel, case_dir / Path(rel).name)
+                _copy_tree(ws / rel, case_dir / Path(rel).parts[1])  # predictor/, tools/, runs/, audits/
     # Unblinding happens only now, after every case has been scored.
     shutil.copy2(sealed_dir(demo_id) / "key.json", results / "answer_key.json")
     (results / "evaluation.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")

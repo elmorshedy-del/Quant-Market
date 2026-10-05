@@ -1,0 +1,100 @@
+{
+  "demo_id": "demo-20261005T221146-b8f8",
+  "cases": {
+    "dataset-1": {
+      "label": "dataset-1",
+      "true_kind": "split",
+      "true_config": {
+        "kind": "split",
+        "phi": [
+          0.415568806565649,
+          -0.4313823640341423
+        ],
+        "type_probs": [
+          0.5192529158299686,
+          0.4807470841700314
+        ],
+        "mu": 0.0004681374314668467,
+        "vol": 0.015,
+        "vol_dispersion": 0.2,
+        "proxy": "age",
+        "proxy_shift": 0.5141943913637456
+      },
+      "frozen_files": {
+        "research/predictor/README.md": "f7e637497c1ca4141b76e547b3c5681117cac8c4777659d72d51f265985c130a",
+        "research/predictor/params.json": "37160e20e8e0cd1137383d9af49f72d9871dfe17dfdcd18c47336a3e0fc062d3",
+        "research/predictor/predict.py": "f0744ba3978c2c85e33b7693e68faa58610c2f3b3f4275be5b655a1d82cb1286",
+        "research/conclusions.json": "7c4e4985008c74814033a5d543170dfc413fc48131b379d9263fba793e6b7b4f"
+      },
+      "claim": "multiple_processes",
+      "claim_record": {
+        "heterogeneity": "multiple_processes",
+        "n_processes": 2,
+        "description": "Each asset belongs permanently to one of two latent types, and each type's next-period return follows an AR(1) in the asset's own last return: r_{t+1} = c_k + phi_k * r_t + sig_k * e. Reversal type: phi = -0.418, c = 0.00050, sig = 0.0139. Momentum type: phi = +0.419, c = 0.00044, sig = 0.0142. These are final estimates on explore + confirmation (450 assets), fitted after the confirmation test. The explore-only fit gave phi = -0.411 / +0.403, and an independent refit on confirmation gave -0.430 / +0.446. The intercepts do not differ between types (explore LR p = 0.88). Innovation sd is similar across types but varies continuously and persistently across assets; this volatility heterogeneity is a nuisance, not a third dynamic type (standardized K=3 vs K=2: dBIC = -9.1 explore, -12.0 confirmation). Type membership depends on age: P(momentum) = logistic(0.223 + 1.419 * age). About 54% of assets are momentum-type. Confirmation: the frozen explore gate predicts the history-inferred type with AUC 0.75; age logit coefficient 1.41, p = 1.9e-7. Lags beyond 1 add nothing once type is known; the pooled lag-2 coefficient of 0.176 is a mixture artefact (approximately E[phi^2]). No mean-return effect of size, liquidity, value, age or sector was confirmed (sector ANOVA on confirmation p = 0.92). Size was a weak exploratory gate covariate (explore Holm p = 0.049) and failed its registered confirmation test (coefficient +0.23, wrong sign). Predictive claim (confirmed out of sample): the frozen two-type forecaster has an MSE of 0.833 times the pooled AR(1) and 0.831 times the zero forecast on 150 unseen confirmation assets (paired one-sided p = 2.3e-14). Mechanistic claim: the two-type AR(1) structure is supported against i.i.d., one pooled AR, and continuous characteristic loading by evidence that discriminates between these structures (bimodality, half-split persistence r = 0.74 and 0.76, discrete beats continuous by 330 log-lik units per 100 confirmation assets). Why age relates to type is not established.",
+        "characteristics_associated": [
+          "age"
+        ],
+        "evidence_entries": [
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5",
+          "R6"
+        ],
+        "heterogeneity_normalized": "multiple_processes"
+      },
+      "predictor_errors": [],
+      "scores": {
+        "mse": {
+          "agent": 0.000200723983527026,
+          "pooled": 0.00024200835331189677,
+          "oracle": 0.0002002383806113002,
+          "mean": 0.0002410690264832796
+        },
+        "mse_ratio_vs_pooled": 0.8294093190590653,
+        "mse_ratio_ci95": [
+          0.8078593814648158,
+          0.8522876445083832
+        ],
+        "improvement_over_pooled_ci95": [
+          3.466118375796549e-05,
+          4.796049138600623e-05
+        ],
+        "oracle_gain_over_pooled": 4.176997270059657e-05,
+        "captured_gain": 0.9883743540076849,
+        "coverage": 1.0,
+        "pooled_fit_on_exploration": {
+          "mean": 0.0006362818833333334,
+          "phi": 0.025446678825693767
+        },
+        "n_assets": 600,
+        "n_predictions": 6000
+      },
+      "verdict": {
+        "pass": true,
+        "claim_ok": true,
+        "prediction_ok": true,
+        "reasons": []
+      },
+      "leakage": {
+        "canary_found_in": [],
+        "sensitive_references": [],
+        "hook_denials": [
+          {
+            "role": "cli_executor",
+            "tool": "Bash",
+            "reason": "This blinded investigation is confined to the workspace (/tmp/claude-0/-home-user-Quant-Market/df163b49-c1ec-5647-8cab-004a08ce7907/scratchpad/pilot-demos/demo-20261005T221146-b8f8/dataset-1); disallo"
+          },
+          {
+            "role": "cli_executor",
+            "tool": "Bash",
+            "reason": "This blinded investigation is confined to the workspace (/tmp/claude-0/-home-user-Quant-Market/df163b49-c1ec-5647-8cab-004a08ce7907/scratchpad/pilot-demos/demo-20261005T221146-b8f8/dataset-1); disallo"
+          }
+        ],
+        "leak_detected": false
+      },
+      "protocol_check_pass": false
+    }
+  }
+}

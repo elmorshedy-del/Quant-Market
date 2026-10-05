@@ -1,0 +1,34 @@
+{
+ "model": "asset-level 2-type AR(1) mixture; P(type=momentum)=logistic(g0+g1*age); forecast=sum_k p_k(c_k+phi_k r_T)",
+ "gate_covariates": [
+  "age"
+ ],
+ "c": [
+  0.000498009723516814,
+  0.00044342615404457616
+ ],
+ "phi": [
+  -0.41814529521743354,
+  0.41848978876693965
+ ],
+ "sig": [
+  0.01392347695864324,
+  0.014183084497456184
+ ],
+ "gate": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   0.2226000452779206,
+   1.4189021085018174
+  ]
+ ],
+ "age_fill": 0.0,
+ "fitted_on": "data/explore + data/confirmation (450 assets, t=1..40), after R5 was recorded",
+ "ledger_entry": "R6",
+ "bic": -99346.89833110341,
+ "bic_K1": -96483.51730440994,
+ "bic_age_size": -99345.3160426164
+}

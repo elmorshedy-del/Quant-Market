@@ -1,0 +1,61 @@
+{
+  "seed": 6555629600154199363,
+  "canary": "SEALED-CANARY-c11500c57a0efbe5",
+  "cases": {
+    "dataset-1": {
+      "kind": "split",
+      "phi": [
+        0.415568806565649,
+        -0.4313823640341423
+      ],
+      "type_probs": [
+        0.5192529158299686,
+        0.4807470841700314
+      ],
+      "mu": 0.0004681374314668467,
+      "vol": 0.015,
+      "vol_dispersion": 0.2,
+      "proxy": "age",
+      "proxy_shift": 0.5141943913637456
+    },
+    "dataset-2": {
+      "kind": "single",
+      "phi": [
+        0.04963888098737506
+      ],
+      "type_probs": [
+        1.0
+      ],
+      "mu": 0.0003988239487942619,
+      "vol": 0.015,
+      "vol_dispersion": 0.2,
+      "proxy": null,
+      "proxy_shift": 0.0
+    }
+  },
+  "criteria": {
+    "split": {
+      "claim_must_be": [
+        "multiple_processes"
+      ],
+      "min_captured_gain": 0.5,
+      "require_ci_improvement_over_pooled": true
+    },
+    "single": {
+      "claim_must_be": [
+        "single_process",
+        "insufficient_evidence"
+      ],
+      "max_mse_ratio_vs_pooled": 1.01
+    }
+  },
+  "sizes": {
+    "T": 40,
+    "explore": 300,
+    "confirm": 150,
+    "fresh": 600,
+    "fresh_targets": 10
+  },
+  "demo_id": "demo-20261005T221146-b8f8",
+  "created_at": 1791238306.8001351
+}
