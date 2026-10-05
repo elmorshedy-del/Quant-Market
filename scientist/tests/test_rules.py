@@ -53,6 +53,12 @@ def test_manager_good_plan_passes():
     assert rules.manager_problems(GOOD_PLAN, round_index=2, skills=SKILLS) == []
 
 
+def test_manager_labels_with_qualifiers_parse():
+    plan = GOOD_PLAN.replace("- Executor assignment:", "- Executor assignment, in this order:").replace(
+        "- Selected move:", "- **Selected move (primary):**")
+    assert rules.manager_problems(plan, round_index=2, skills=SKILLS) == []
+
+
 def test_manager_missing_record_fails():
     plan = GOOD_PLAN.split("Scientific decision record:")[0] + "Run some analysis.\n"
     problems = rules.manager_problems(plan, round_index=1, skills=SKILLS)

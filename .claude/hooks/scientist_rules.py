@@ -263,7 +263,9 @@ def manager_route(text: str) -> str:
 
 def _label_pattern(label: str) -> re.Pattern[str]:
     words = r"\s+".join(re.escape(part) for part in label.split())
-    return re.compile(rf"(?im)^\s*(?:[-*•]|\d+[.)])?\s*\**\s*{words}\s*\**\s*:\s*\**")
+    # Allow a short qualifier before the colon, e.g. "Executor assignment, in this order:"
+    # or "Selected move (primary):". The label must still start the line.
+    return re.compile(rf"(?im)^\s*(?:[-*•]|\d+[.)])?\s*\**\s*{words}\s*\**(?:[ ,(\u2014-][^:\n]{{0,60}})?:\s*\**")
 
 
 def decision_record(text: str) -> dict[str, str]:
