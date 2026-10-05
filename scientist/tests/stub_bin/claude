@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Deterministic stand-in for `claude --print --output-format stream-json` (tests only).
+
+Emits role-appropriate text so LongHorizon's loop advances without model calls.
+The auditor never approves completion, so a run can only end at its round limit.
+"""
+import json, os, sys
+
+if "--version" in sys.argv:
+    print("2.1.289 (Claude Code)")
+    sys.exit(0)
+prompt = sys.stdin.read()
+role = os.environ.get("LH_HARNESS_CLAUDE_ROLE", "")
+model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "stub"
+if role == "manager":
+    text = """Current task state:
+- Completed: nothing audited.
+Task contract:
+- Target: stub investigation.
+Dependency assessment:
+- Routing rationale: CLI.
+Next: cli
+Task:
+Scientific decision record:
+- Reading of last result: stub.
+- Blocker: stub blocker.
+- Options considered:
+  1. option one
+  2. option two
+- Selected move: planted-truth
+- Why this move: stub.
+- Belief-changing observation: stub.
+- Executor assignment: append a line to stub_progress.txt.
+- Budget and stopping rule: one command.
+Related audit reports:
+- none
+Boundaries:
+- none"""
+elif role in ("cli_executor", "gui_executor"):
+    with open("stub_progress.txt", "a") as handle:
+        handle.write("executor ran\n")
+    text = "Appended one line to stub_progress.txt."
+elif role in ("cli_auditor", "gui_auditor", "auditor_format_repair"):
+    text = "Status: incomplete\nIntegrity: clean\nContract audit: unknown\n\nStub audit.\nState update for manager:\n- keep going"
+else:
+    text = "Stub final reply."
+for record in (
+    {"type": "system", "subtype": "init", "model": model, "session_id": "stub", "tools": ["Bash"]},
+    {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}},
+    {"type": "result", "subtype": "success", "is_error": False, "result": text},
+):
+    print(json.dumps(record), flush=True)

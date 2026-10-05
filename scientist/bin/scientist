@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Entry point for the scientist setup. See scientist/README.md.
+set -euo pipefail
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PY="$REPO/.venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  if [[ "${1:-}" == "setup" ]]; then PY="$(command -v python3)"; else
+    echo "No .venv yet. Run: scientist/bin/scientist setup" >&2; exit 2; fi
+fi
+PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m scientist.cli "$@"
