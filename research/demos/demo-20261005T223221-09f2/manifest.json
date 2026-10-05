@@ -1,0 +1,25 @@
+{
+  "demo_id": "demo-20261005T223221-09f2",
+  "workspaces": {
+    "dataset-1": "/root/scientist-demos/demo-20261005T223221-09f2/dataset-1",
+    "dataset-2": "/root/scientist-demos/demo-20261005T223221-09f2/dataset-2"
+  },
+  "sealed_key": "/root/.local/state/scientist/sealed/demo-20261005T223221-09f2/key.json",
+  "pass_criteria_declared_before_run": {
+    "split": {
+      "claim_must_be": [
+        "multiple_processes"
+      ],
+      "min_captured_gain": 0.5,
+      "require_ci_improvement_over_pooled": true
+    },
+    "single": {
+      "claim_must_be": [
+        "single_process",
+        "insufficient_evidence"
+      ],
+      "max_mse_ratio_vs_pooled": 1.01
+    }
+  },
+  "created_at": 1791239541.5437093
+}

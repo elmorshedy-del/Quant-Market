@@ -135,6 +135,31 @@ a transcript or file. A detected leak invalidates the demo result.
   round limit, the gate policy stops rather than grants rounds, and resume continues the same ledger.
 - `test_demo.py`: planted-truth checks of the generator and the evaluator.
 
-## Results
+## What was tested (2026-10-05, Linux container, Claude Code 2.1.289, lh-harness 0.1.7)
 
-See the bottom of this file (filled in from actual runs).
+RESULTS_PLACEHOLDER
+
+## Known gaps
+
+- **One runtime.** Only Claude Code is installed and authenticated here. `AGENTS.md` points other
+  runtimes (Codex, OpenCode, DeepSeek Harness) at `SCIENTIST.md` and the skills, but the hooks are
+  Claude Code hooks. Under another backend, everything listed as *enforced* above becomes
+  *instruction only*. That path is untested.
+- **Enforcement checks form, not judgment.** "Performed" means at least one shell command ran and a
+  complete ledger entry was written. A trivial command satisfies that. "Independent audit" means a
+  read-only auditor on a different model that ran its own command. That model is the same
+  provider's, so its errors are not fully independent.
+- **Bounded blocking.** Each role session can be blocked at most twice. A third failure is let
+  through, logged as `exhausted`, and fails `scientist check`. This prevents deadlock but means
+  the hook cannot force compliance.
+- **Resume goes through LongHorizon's web control API** (its CLI has no resume). The private server
+  binds to 127.0.0.1 on a random port without a token, for the duration of one launcher call.
+- **Blinding is detectable, not sandboxed** (see above).
+- **Model priors.** Before seeing any data, the pilot Manager already proposed that a near-zero
+  pooled autocorrelation might hide opposite-signed groups, a textbook idea also present in the
+  `hidden-states-and-trajectories` skill. The demo therefore tests verification and restraint
+  (the control) more than unaided discovery.
+- **No real-data investigation was run.** `research/questions/q1.md` needs market data (yfinance
+  network access), which was not exercised here.
+- **Platform.** LongHorizon documents macOS as its tested platform. Everything here ran on Linux.
+  No computer-use plugin is installed, so GUI subtasks have no computer-use server.
