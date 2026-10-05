@@ -2,7 +2,8 @@
 
 Status: round 1 complete (2026-10-03): broad, no-selection baselines across 9 soccer leagues + NBA,
 NFL, WNBA, NHL, MLB, ATP, WTA (about 21,700 games). Round 2 (thesis-driven MLS end-game study) in
-`MLS_ENDGAME.md`.
+`MLS_ENDGAME.md`. Round 3 (when a resting order makes money, every trade as a maker fill, pre-registered
+filters tested on a sealed holdout and fresh games) in `MAKER_EDGE.md`: no filter held out of sample.
 
 ## Corrections (read first)
 
