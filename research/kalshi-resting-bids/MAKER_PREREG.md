@@ -91,3 +91,77 @@ rejected every refinement as adding nothing robust. Their caveats:
 
 Reviewers' out-of-sample expectation for the cheap side: about +0.3c per contract at 5 minutes
 (range -0.3 to +0.8).
+
+## Addendum (2026-10-05): pre-scoring audit, fixes, and reading rules
+
+Written and committed before any v2 or v2.1 table of the sealed holdout or the fresh sample was scored.
+The specs and the success rule above are unchanged.
+
+### Audit
+
+Three independent auditors used discovery data only: one for look-ahead and selection leaks, one for
+whether the measured edge can be captured, one for statistics.
+
+- **Leaks.** Every fill was rebuilt from raw trades and candles (782k fills, 10 series), and 40 fills were
+  checked by hand. The ex-ante features, max_bid_before, the markouts and settlement all match, and no
+  sample selection depends on the outcome. The fresh sample shares 0 games with the main sample.
+- **Statistics.** The bootstrap and the scoring code are correct.
+
+### Fixed in the v2.1 tables (maker_edge.py)
+
+1. Some fills came before their market's first candle, because candles were only downloaded from 6 h
+   before the market's close. Their features and markouts were read from a later candle, sometimes a
+   post-game one. These fills are now dropped. P1 was already unaffected (max_bid_before is missing for
+   them); S1-S8 and C2 were affected.
+2. Marks. A contract with no bid was marked at ask/2 (about 0.5c), yet such contracts almost never win.
+   That inflated P1 by about 0.15c on discovery. Markouts now use the mid of a two-sided book, the bid
+   when there is no ask, and 0 when there is no bid. The raw-mid version is still reported as mo300_mid.
+   This change can only lower the measured edge.
+3. The sweep flag depended on the arbitrary order of trades that share a timestamp. It now looks at all
+   prints of the same taker side within [t, t + 1 s], ties included.
+4. tv10 now counts only strictly earlier trades. Fees use the series fee multiplier (MLB 0.5).
+
+### Discovery facts the readout must take into account (v2.0 tables, P1)
+
+- net_mo300 is +0.90 [+0.35, +1.44] at the raw mid and about +0.75 with no-bid books marked at 0.
+- Half the spread at the mark is about 0.62c of that. Selling at the bid 5 minutes later nets -0.06c
+  [-0.58, +0.46].
+- Fills with a markout above +20c are 3.6% of contracts and carry all of the edge. Without them P1 is
+  -0.89c.
+- A new order at the back of the queue gets fills only when the price trades through its level. Those
+  earn about +0.1 to +0.7c, and the bot would get 3-20% of the historical volume.
+- The edge is concentrated in the most active third of games. NFL, 24% of contracts, is negative.
+
+### Power: a fail is the expected outcome even if a small edge is real
+
+Simulated by resampling discovery games at the sizes of the sealed and fresh sets. The SE of P1
+net_mo300 is about 0.33c on sealed and 0.29c on fresh.
+
+| True edge (c/contract) | 0 | +0.3 | +0.6 | +1.0 |
+|---|---|---|---|---|
+| P(primary passes on both sets) | 0.0% | 1.7% | 23% | 87% |
+| P(primary and tradable both pass) | 0.0% | 0.0% | 0.9% | 26% |
+
+### Reading rules, fixed now
+
+1. A primary fail does not mean there is no edge. It means the edge is below the upper bound of the
+   range. Both bounds are reported, and a pooled sealed + fresh estimate is given as descriptive only.
+2. A primary pass with exit_bid <= 0, and with back-of-queue bot results that are not above zero, is not
+   a maker edge a bot can capture. It would point to the underdog/comeback premium, which can only be
+   collected by holding to settlement, with the variance that implies.
+3. drop10, cap20, pos_games and med_game lean negative even when the edge is zero, so each is reported
+   next to its value under zero edge (each contract's net markout shifted so the set's mean is 0). They are
+   read against that reference, not against zero. A symmetric 1% trim of games (trim1) is also reported.
+4. A secondary spec counts as a pass only if lb_bonf > 0 on both sets. lb_bonf is the lower bound of the
+   one-sided 99.6875% range, a Bonferroni correction over the 8 secondaries. S2-S6 are subsets of S1 and
+   about 4 independent tests in all. If P1 fails, any secondary pass is only a hypothesis for new data.
+5. C1 mirrors P1 (bootstrap correlation -0.65), so it is not an independent control. C2 is the only
+   control that is nearly independent of P1.
+6. Sealed includes NFL and fresh does not. Sealed without NFL is reported so the two compare on the same
+   9 series.
+7. The headline weighting stays contract-weighted, as pre-registered. Also reported: each fill capped at 10
+   contracts (a small bot at the front of the queue), equal weight per game (the typical game), and the
+   back-of-queue bot (100 or 500 contracts per price level, filled only when the price trades through it
+   within 60 s or 300 s).
+
+Scoring command (run once): `python3 maker_final2.py maker_specs_final.json holdout fresh`.
