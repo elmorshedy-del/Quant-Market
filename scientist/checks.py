@@ -126,7 +126,8 @@ def check_run(workspace: Path, run_id: str) -> Report:
             hook_events_seen[event] = hook_events_seen.get(event, 0) + 1
         plan = str(record.get("plan_text") or "")
         decision_problems[index] = rules.manager_problems(plan, round_index=index, skills=skills)
-        moves[index] = rules.decision_record(plan).get("Selected move", "").splitlines()[0][:80] if rules.decision_record(plan) else ""
+        selected = rules.decision_record(plan).get("Selected move", "").strip()
+        moves[index] = selected.splitlines()[0][:80] if selected else ""
         if route in {"cli", "gui"}:
             executor_traj = rules.read_jsonl(rdir / "executor_raw_trajectory.jsonl")
             models["executor"].add(_model_of(executor_traj))
@@ -138,7 +139,7 @@ def check_run(workspace: Path, run_id: str) -> Report:
                     skill_calls[key] = skill_calls.get(key, 0) + 1
             auditor_traj = rules.read_jsonl(rdir / "auditor_raw_trajectory.jsonl")
             models["auditor"].add(_model_of(auditor_traj))
-            audit_text = str(record.get("auditor_report") or "")
+            audit_text = rules.full_auditor_report(rdir, str(record.get("auditor_report") or ""))
             auditor_problems[index] = rules.auditor_problems(audit_text)
             auditor_bash[index] = sum(1 for use in rules.tool_uses(auditor_traj) if use["name"] == "Bash")
             try:

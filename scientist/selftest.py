@@ -10,12 +10,16 @@ where it matters. A check that has never failed proves nothing.
 3. tool execution       — a Bash command runs in the research venv and its output is reported.
 4. hook enforcement     — as Manager, an output without a decision record is blocked by the
                           Stop hook and revised; the enforcement log records block then pass.
+5. executor enforcement — as Executor, under LongHorizon's own environment (no session
+                          transcript), real work plus a ledger entry passes the Stop hook, and a
+                          reply that only recommends work is blocked (control).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -97,6 +101,31 @@ def run_selftest(model: str | None = None) -> bool:
         ok = "block" in decisions and revised
         results.append(("hook enforcement (Manager decision record)", ok,
                         f"Stop decisions: {decisions}; revised output has decision record: {revised}"))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ws = Path(tmp) / "ws"
+        (ws / "research").mkdir(parents=True)
+        shutil.copytree(REPO_ROOT / ".claude", ws / ".claude", ignore=shutil.ignore_patterns("__pycache__"))
+        ledger = (REPO_ROOT / "scientist" / "templates" / "ledger.md").read_text(encoding="utf-8")
+        (ws / "research" / "ledger.md").write_text(ledger.replace("{questions}", "- **Q1** [open] selftest"), encoding="utf-8")
+        state = Path(tmp) / "state"
+        env = {"LH_HARNESS_CLAUDE_ROLE": "cli_executor", "CLAUDE_CODE_SKIP_PROMPT_HISTORY": "1",
+               "SCIENTIST_STATE_DIR": str(state), "SCIENTIST_RUNS_ROOT": str(Path(tmp) / "no-runs")}
+        _claude(
+            "Use the Bash tool to run: python3 -c \"print(sum(range(10)))\". Then edit research/ledger.md: under "
+            "'## Experiment results' add an entry headed '### R1 — selftest sum' with these bullet fields, each "
+            "written as `- **Field:** value` and filled with one short sentence about this computation: Question, "
+            "Reasoning move (use planted-truth), Justification, Prediction (registered before running), Procedure, "
+            "Actual result, Verification status (exactly: pending audit), Change in belief, Artifacts. Reply 'done'.",
+            cwd=ws, model=model, env_extra=env)
+        good = [i for i in rules.read_jsonl(state / "enforcement.jsonl") if i.get("event") == "Stop"]
+        _claude("Do not use any tools. Reply only: I recommend running a regression of returns on lagged returns.",
+                cwd=ws, model=model, env_extra=env)
+        after = [i for i in rules.read_jsonl(state / "enforcement.jsonl") if i.get("event") == "Stop"][len(good):]
+        passed = bool(good) and good[-1].get("decision") == "pass"
+        control_blocked = any(i.get("decision") == "block" for i in after)
+        results.append(("executor enforcement (no transcript, as under LongHorizon)", passed and control_blocked,
+                        f"real work: {[i.get('decision') for i in good]}; recommend-only control: {[i.get('decision') for i in after]}"))
 
     lines = [f"# scientist selftest — {time.strftime('%Y-%m-%d %H:%M:%S %Z')}", "", f"Model: `{model}`", "",
              "| Probe | Result | Evidence |", "|---|---|---|"]

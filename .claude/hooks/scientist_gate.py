@@ -11,6 +11,10 @@ Events handled (configured in .claude/settings.json):
   SessionStart  record a ledger snapshot for the session, sync auditor reports into
                 research/audits/ and the ledger's Audit log, and inject a short
                 role reminder as context.
+  PostToolUse   record each completed tool call in an append-only per-session log.
+                (LongHorizon sets CLAUDE_CODE_SKIP_PROMPT_HISTORY=1, so Claude Code
+                writes no session transcript; this log is how the Stop check knows
+                which tools actually ran.)
   PreToolUse    tool allowlist for harness roles; in blinded workspaces
                 (.scientist/blinding.json) also confine paths to the workspace and
                 keep gated data locked until a prediction is registered.
@@ -79,6 +83,29 @@ def save_session(ws: Path, session_id: str, state: dict) -> None:
     session_file(ws, session_id).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
 
+def tools_log(ws: Path, session_id: str) -> Path:
+    return session_file(ws, session_id).with_suffix(".tools.jsonl")
+
+
+def record_tool(ws: Path, session_id: str, tool: str) -> None:
+    # One small O_APPEND write per call, so parallel tool calls do not clobber each other.
+    with open(tools_log(ws, session_id), "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"ts": time.time(), "tool": tool}) + "\n")
+
+
+def tools_used(ws: Path, session_id: str, transcript_path: str | None) -> list[str]:
+    names = [str(item.get("tool")) for item in rules.read_jsonl(tools_log(ws, session_id))]
+    if not names and transcript_path:
+        names = [use["name"] for use in rules.tool_uses(rules.read_jsonl(transcript_path))]
+    return names
+
+
+def rounds_recorded(run_dir: Path | None) -> int | None:
+    if run_dir is None:
+        return None
+    return len(rules.read_jsonl(run_dir / "lh_harness" / "role_orchestration" / "rounds.jsonl"))
+
+
 def read_ledger(ws: Path) -> str:
     try:
         return (ws / rules.LEDGER_RELPATH).read_text(encoding="utf-8")
@@ -130,7 +157,8 @@ def sync_audits(ws: Path, run_dir: Path | None) -> int:
     rows: dict[tuple[str, int], str] = {}
     for record in rounds:
         index = int(record.get("round_index") or 0)
-        report = str(record["auditor_report"]).strip()
+        round_dir = run_dir / "lh_harness" / "role_orchestration" / "rounds" / f"round_{index:03d}"
+        report = rules.full_auditor_report(round_dir, str(record["auditor_report"])).strip()
         header = rules.auditor_header(report)
         target = out_dir / f"round_{index:03d}.md"
         body = (
@@ -237,8 +265,13 @@ def on_session_start(data: dict, role: str, ws: Path) -> None:
     snapshots.mkdir(parents=True, exist_ok=True)
     snapshot_path = snapshots / f"{int(time.time() * 1000)}_{role}.md"
     snapshot_path.write_text(ledger, encoding="utf-8")
+    round_index = None
+    if role == "manager":
+        done = rounds_recorded(current_run_dir(ws))
+        round_index = None if done is None else done + 1
     save_session(ws, session_id, {
         "role": role,
+        "round_index": round_index,
         "started": time.time(),
         "ledger_sha": rules.sha256_text(ledger),
         "ledger_snapshot": str(snapshot_path),
@@ -304,16 +337,20 @@ def on_pre_tool_use(data: dict, role: str, ws: Path) -> None:
         log(ws, {"event": "PreToolUse", "decision": "allow_gated", "tool": tool, "gate": gated})
 
 
+def on_post_tool_use(data: dict, role: str, ws: Path) -> None:
+    record_tool(ws, str(data.get("session_id") or ""), str(data.get("tool_name") or ""))
+
+
 def stop_problems(data: dict, role: str, ws: Path, state: dict) -> list[str]:
     records = rules.read_jsonl(data.get("transcript_path") or "")
     text = str(data.get("last_assistant_message") or "") or rules.last_assistant_text(records)
-    uses = rules.tool_uses(records)
+    used = tools_used(ws, str(data.get("session_id") or ""), data.get("transcript_path"))
     if role == "manager":
-        round_index = rules.round_index_from_prompt(rules.first_user_text(records))
+        round_index = state.get("round_index") or rules.round_index_from_prompt(rules.first_user_text(records))
         return rules.manager_problems(text, round_index=round_index, skills=rules.known_skills(ws))
     if role in EXECUTOR_ROLES:
         problems: list[str] = []
-        if not any(use["name"] == "Bash" for use in uses):
+        if "Bash" not in used:
             problems.append(
                 "no command was executed: the Executor must perform the investigation (run code), not only describe or recommend it"
             )
@@ -334,10 +371,9 @@ def stop_problems(data: dict, role: str, ws: Path, state: dict) -> list[str]:
         return problems
     if role in AUDITOR_ROLES:
         problems = rules.auditor_problems(text)
-        inspections = [use for use in uses if use["name"] in {"Read", "Grep", "Glob", "Bash", "LS"}]
-        if not inspections:
+        if not any(name in {"Read", "Grep", "Glob", "Bash", "LS"} for name in used):
             problems.append("no independent inspection was made: read the files or run a command before judging the claims")
-        elif not rules.calculation_not_applicable(text) and not any(use["name"] == "Bash" for use in uses):
+        elif not rules.calculation_not_applicable(text) and "Bash" not in used:
             problems.append("'Calculation check' requires recomputing at least one number with your own command (Bash), or stating 'not applicable' when no calculation was claimed")
         return problems
     return []
@@ -385,6 +421,8 @@ def main() -> int:
             on_session_start(data, role, ws)
         elif event == "PreToolUse":
             on_pre_tool_use(data, role, ws)
+        elif event == "PostToolUse":
+            on_post_tool_use(data, role, ws)
         elif event == "Stop":
             on_stop(data, role, ws)
     except Exception as exc:  # a hook crash must never wedge a role; record it instead

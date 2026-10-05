@@ -488,6 +488,17 @@ def last_assistant_text(records: Iterable[dict[str, Any]]) -> str:
     return text
 
 
+def full_auditor_report(round_dir: str | os.PathLike[str], fallback: str = "") -> str:
+    """The auditor's complete final reply.
+
+    LongHorizon clips long reports in rounds.jsonl / auditor_report.txt
+    ("...[auditor report truncated N chars...]"); the raw stream-json trajectory
+    keeps the full final message.
+    """
+    text = last_assistant_text(read_jsonl(Path(round_dir) / "auditor_raw_trajectory.jsonl"))
+    return text if text.strip() else fallback
+
+
 # --------------------------------------------------------------- tool boundaries
 
 # Tools a harness role may use. Anything else (messaging, scheduling, artifacts,
@@ -507,9 +518,13 @@ SYSTEM_PATH_PREFIXES = (
 
 _URL_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+")
 _ABS_PATH_RE = re.compile(r"(?:^|(?<=[\s'\"=(,:\[{]))(/[A-Za-z._~][^\s'\"`;|&<>(){}\[\],]*)")
-_HOME_RE = re.compile(r"(?:^|(?<=[\s'\"=(,:]))~(?=/|\s|$|['\"])|\$HOME\b|\$\{HOME\}")
-_ROOT_SEARCH_RE = re.compile(r"(?:^|\s)/(?:\s|$|\*)")
-_DOTDOT_RE = re.compile(r"(?:^|(?<=[\s'\"=(,:]))((?:[\w.-]+/)*\.\.(?:/[\w.-]*)*)")
+_HOME_RE = re.compile(r"(?:^|(?<=[\s'\"=(,:]))~(?=/|\s|$|[;&|'\"])|\$HOME\b|\$\{HOME\}")
+_ROOT_SEARCH_RE = re.compile(
+    r"(?:^|[;&|(]\s*|\s)(?:find|ls|du|tree|locate|grep|rg|cat|cd)\b[^;&|\n]*?\s/(?:\s|$|\*|;|&)"
+)
+_DOTDOT_RE = re.compile(r"(?:^|(?<=[\s'\"=(,:]))((?:[\w.-]+/)*\.\.(?![.\w])(?:/[\w.-]*)*)")
+_CD_RE = re.compile(r"(?:^|[;&|(]\s*|\s)cd\s+([^\s;&|)]+)")
+_HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n\s*\2\s*(?:\n|$)", re.S)
 
 
 def _within(path: str, root: str) -> bool:
@@ -518,32 +533,53 @@ def _within(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip("/") + "/")
 
 
+def _split_heredocs(text: str) -> tuple[str, str]:
+    """(command text with heredoc bodies removed, concatenated heredoc bodies)."""
+    bodies: list[str] = []
+
+    def keep(match: re.Match[str]) -> str:
+        bodies.append(match.group(3))
+        return "\n"
+
+    return _HEREDOC_RE.sub(keep, text), "\n".join(bodies)
+
+
 def path_violations(text: str, *, workspace: str, cwd: str | None = None, extra_allowed: Iterable[str] = ()) -> list[str]:
     """Absolute or escaping paths in `text` that leave the workspace.
 
-    A heuristic for keeping a blinded investigation inside its workspace. Paths
-    built at run time (string concatenation in a script) are invisible to it; the
-    post-run leakage audit is the backstop.
+    A heuristic for keeping a blinded investigation inside its workspace. Heredoc
+    bodies (code being written or piped to an interpreter) are scanned only for
+    absolute paths, since `..`, `/` and `~` are ordinary code there. Relative `..`
+    is resolved after any earlier `cd` in the same command. Paths built at run
+    time are invisible to it; the post-run leakage audit is the backstop.
     """
     text = _URL_RE.sub(" ", text or "")
+    command, bodies = _split_heredocs(text)
     cwd = cwd or workspace
     allowed = [os.path.normpath(p) for p in extra_allowed if p]
     violations: list[str] = []
-    if _HOME_RE.search(text):
+    if _HOME_RE.search(command) or "~/" in bodies or "$HOME" in bodies:
         violations.append("home-directory reference (~ or $HOME)")
-    if _ROOT_SEARCH_RE.search(text):
+    if _ROOT_SEARCH_RE.search(command):
         violations.append("filesystem-root reference ('/')")
-    for match in _ABS_PATH_RE.finditer(text):
+    for source in (command, bodies):
+        for match in _ABS_PATH_RE.finditer(source):
+            candidate = match.group(1)
+            normalized = os.path.normpath(candidate)
+            if _within(normalized, workspace) or any(_within(normalized, a) for a in allowed):
+                continue
+            if any((normalized + "/").startswith(prefix) or normalized.startswith(prefix) for prefix in SYSTEM_PATH_PREFIXES):
+                continue
+            violations.append(candidate)
+    cds = [(m.end(), m.group(1)) for m in _CD_RE.finditer(command)]
+    for match in _DOTDOT_RE.finditer(command):
+        current = cwd
+        for end, target in cds:
+            if end > match.start():
+                break
+            current = target if target.startswith("/") else os.path.join(current, target)
         candidate = match.group(1)
-        normalized = os.path.normpath(candidate)
-        if _within(normalized, workspace) or any(_within(normalized, a) for a in allowed):
-            continue
-        if any((normalized + "/").startswith(prefix) or normalized.startswith(prefix) for prefix in SYSTEM_PATH_PREFIXES):
-            continue
-        violations.append(candidate)
-    for match in _DOTDOT_RE.finditer(text):
-        candidate = match.group(1)
-        if not _within(os.path.normpath(os.path.join(cwd, candidate)), workspace):
+        if not _within(os.path.normpath(os.path.join(current, candidate)), workspace):
             violations.append(candidate)
     return sorted(set(violations))
 

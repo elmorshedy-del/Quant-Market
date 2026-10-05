@@ -206,6 +206,15 @@ def test_rejected_hypotheses_must_be_preserved():
         ("ls ~", True),
         ("cat ../../other/file", True),
         ("python -c \"open('/home/user/x')\"", True),
+        # False positives seen in the pilot run (must be allowed):
+        ("cat > research/tools/t.py <<'EOF'\n\"\"\"simulate_panel(...) -> X / n\"\"\"\nEOF\necho ok", False),
+        ("cd research/artifacts/predictor_test && ls && cd ../../.. && .venv/bin/python x.py", False),
+        ("python - <<'EOF'\nmask = ~flags\nprint(a / b, s[..., 0])\nEOF", False),
+        # Still caught inside heredocs and after cd:
+        ("python - <<'EOF'\nopen('/root/.local/state/k.json')\nEOF", True),
+        ("cd research && cat ../../outside.txt", True),
+        ("ls /", True),
+        ("grep -r secret / --include=*.json", True),
     ],
 )
 def test_path_confinement(command, bad, tmp_path):
@@ -348,3 +357,53 @@ def test_hook_syncs_audits_into_ledger(tmp_path):
     run_hook({"hook_event_name": "SessionStart", "cwd": str(ws), "session_id": "m2"}, env, ws)
     assert (ws / "research" / "ledger.md").read_text().count("| run1 | 1 |") == 1  # idempotent
     assert rules.ledger_problems((ws / "research" / "ledger.md").read_text()) == []
+
+
+def post_tool(ws: Path, env: dict, session: str, *tools: str) -> None:
+    for tool in tools:
+        run_hook({"hook_event_name": "PostToolUse", "cwd": str(ws), "session_id": session, "tool_name": tool,
+                  "tool_input": {}}, env, ws)
+
+
+def test_hook_uses_post_tool_log_without_transcript(tmp_path):
+    """LongHorizon sets CLAUDE_CODE_SKIP_PROMPT_HISTORY=1, so no transcript exists.
+
+    Regression for the pilot run, where the executor ran dozens of commands and was
+    still blocked because tool use was read only from the (missing) transcript.
+    """
+    ws = make_workspace(tmp_path)
+    missing = str(tmp_path / "no-transcript.jsonl")
+    env = {"LH_HARNESS_CLAUDE_ROLE": "cli_executor"}
+    run_hook({"hook_event_name": "SessionStart", "cwd": str(ws), "session_id": "x1"}, env, ws)
+    (ws / "research" / "ledger.md").write_text(with_entry(LEDGER_OK, ENTRY), encoding="utf-8")
+    blocked = run_hook({"hook_event_name": "Stop", "cwd": str(ws), "session_id": "x1", "transcript_path": missing,
+                        "last_assistant_message": "done"}, env, ws)
+    assert blocked.get("decision") == "block" and "no command was executed" in blocked["reason"]
+    post_tool(ws, env, "x1", "Read", "Bash")
+    assert run_hook({"hook_event_name": "Stop", "cwd": str(ws), "session_id": "x1", "transcript_path": missing,
+                     "last_assistant_message": "done"}, env, ws) == {}
+
+    env = {"LH_HARNESS_CLAUDE_ROLE": "cli_auditor"}
+    run_hook({"hook_event_name": "SessionStart", "cwd": str(ws), "session_id": "x2"}, env, ws)
+    post_tool(ws, env, "x2", "Read")
+    needs_bash = run_hook({"hook_event_name": "Stop", "cwd": str(ws), "session_id": "x2", "transcript_path": missing,
+                           "last_assistant_message": GOOD_AUDIT}, env, ws)
+    assert needs_bash.get("decision") == "block" and "recomputing" in needs_bash["reason"]
+    post_tool(ws, env, "x2", "Bash")
+    assert run_hook({"hook_event_name": "Stop", "cwd": str(ws), "session_id": "x2", "transcript_path": missing,
+                     "last_assistant_message": GOOD_AUDIT}, env, ws) == {}
+
+
+def test_hook_manager_round_index_from_run_records(tmp_path):
+    ws = make_workspace(tmp_path)
+    rounds = ws / ".lh-harness" / "runs" / "run9" / "lh_harness" / "role_orchestration"
+    rounds.mkdir(parents=True)
+    (rounds / "rounds.jsonl").write_text(json.dumps({"round_index": 1, "auditor_report": GOOD_AUDIT}) + "\n")
+    env = {"LH_HARNESS_CLAUDE_ROLE": "manager", "SCIENTIST_RUN_ID": "run9"}
+    run_hook({"hook_event_name": "SessionStart", "cwd": str(ws), "session_id": "m9"}, env, ws)
+    plan = GOOD_PLAN.replace(
+        "- Reading of last result: round_001 showed the pooled statistic is near zero (audited).",
+        "- Reading of last result: none yet")
+    out = run_hook({"hook_event_name": "Stop", "cwd": str(ws), "session_id": "m9",
+                    "transcript_path": str(tmp_path / "missing.jsonl"), "last_assistant_message": plan}, env, ws)
+    assert out.get("decision") == "block" and "Reading of last result" in out["reason"]  # round 2 inferred
