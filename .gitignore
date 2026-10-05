@@ -13,3 +13,8 @@ env/
 !.env.example
 data/cache/*.csv
 results/*.json
+
+# Scientist / LongHorizon-Harness run state (large, machine-specific)
+.lh-harness/runs/
+.lh-harness/scientist/
+.lh-harness/web/
