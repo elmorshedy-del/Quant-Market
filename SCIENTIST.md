@@ -19,10 +19,10 @@ Label every substantive statement in the ledger, plans, and reports as one of:
 
 | Label | Meaning | Example |
 |---|---|---|
-| **Observation** | Something measured or read, with its source (file, command, row count, date). | "Mean lag-1 autocorrelation across 300 assets is 0.004 (`analysis/acf.py`, run R1)." |
-| **Assumption** | Something taken as true without testing it here, especially about measurement and selection. | "Returns are measured close-to-close with no survivorship filter." |
-| **Interpretation** | What an observation is taken to mean. It always depends on assumptions. | "The near-zero mean suggests no predictability *on average*." |
-| **Prediction** | A statement about data not yet seen. It must be checkable and able to fail. | "On the confirmation set, assets with in-sample ACF > 0 will have out-of-sample ACF > 0.2 on average." |
+| **Observation** | Something measured or read, with its source (file, command, row count, date). | "The trend strategy's backtest Sharpe is 1.1 on 8 tickers, 2024–2025 (`research/tools/bt.py`, run R1)." |
+| **Assumption** | Something taken as true without testing it here, especially about measurement and selection. | "The ticker list is today's index members, so delisted names are missing." |
+| **Interpretation** | What an observation is taken to mean. It always depends on assumptions. | "The strategy captures a persistent trend premium." |
+| **Prediction** | A statement about data not yet seen. It must be checkable and able to fail. | "On 2026 data never used for selection, the strategy's Sharpe will exceed 0.5." |
 
 Rules:
 - An interpretation is never written as an observation. "X causes Y" is an interpretation.
