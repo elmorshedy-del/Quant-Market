@@ -24,6 +24,17 @@ Important:
 - Better bars do not automatically remove survivorship bias.
 - Production-grade research still needs point-in-time universes including delisted symbols.
 
+## Scientist agent (autonomous research loop)
+Research on this repository can run as a bounded Manager → Executor → Auditor loop on
+LongHorizon-Harness with Claude Code. Shared rules are in `SCIENTIST.md`, durable research
+state is in `research/ledger.md`, and startup steps are in `scientist/README.md`:
+
+```bash
+scientist/bin/scientist setup && scientist/bin/scientist selftest
+scientist/bin/scientist run --question @research/questions/q1.md --rounds 3
+scientist/bin/scientist resume <run-id> --rounds 1
+```
+
 ## Current implementation scope
 See `docs/implementation-status.md`.
 

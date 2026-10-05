@@ -19,7 +19,8 @@ The task is complete when all of these hold:
 
 1. Every substantial investigation is recorded in `research/ledger.md` as an
    `### R<id>` entry under *Experiment results*, with all fields from SCIENTIST.md §6.
-   Verification statuses reflect the audits.
+   Earlier entries' verification statuses reflect their audits. The newest entry may stay
+   `pending audit`, because software records its audit in the ledger's *Audit log*.
 2. Every research question in the ledger's *Questions* section has a conclusion status
    (**supported**, **rejected**, **insufficient evidence**, or **open**), backed by
    audited evidence. Competing and rejected hypotheses are recorded with reasons.
